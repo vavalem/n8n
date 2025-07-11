@@ -38,6 +38,7 @@ import { PostHogClient } from '@/posthog';
 import { ShutdownService } from '@/shutdown/shutdown.service';
 import { WorkflowHistoryManager } from '@/workflows/workflow-history.ee/workflow-history-manager.ee';
 import { CommunityPackagesConfig } from '@/community-packages/community-packages.config';
+import { AuthRolesService } from '@/auth/auth.roles.service';
 
 export abstract class BaseCommand<F = never> {
 	readonly flags: F;
@@ -119,6 +120,8 @@ export abstract class BaseCommand<F = never> {
 				async (error: Error) =>
 					await this.exitWithCrash('There was an error running database migrations', error),
 			);
+
+		await Container.get(AuthRolesService).init();
 
 		Container.get(DeprecationService).warn();
 
