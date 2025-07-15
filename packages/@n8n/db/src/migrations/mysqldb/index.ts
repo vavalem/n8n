@@ -91,6 +91,7 @@ import { AddLastActiveAtColumnToUser1750252139166 } from '../common/175025213916
 import { AddInputsOutputsToTestCaseExecution1752669793000 } from '../common/1752669793000-AddInputsOutputsToTestCaseExecution';
 import { AddScopeTables1750252139166 } from '../common/1750252139166-AddScopeTables';
 import { AddRolesTables1750252139167 } from '../common/1750252139167-AddRolesTables';
+import { LinkGlobalRoleToUserTable1750252139168 } from '../common/1750252139168-LinkGlobalRoleToUserTable';
 import type { Migration } from '../migration-types';
 import { UpdateParentFolderIdColumn1740445074052 } from '../mysqldb/1740445074052-UpdateParentFolderIdColumn';
 
@@ -189,4 +190,5 @@ export const mysqlMigrations: Migration[] = [
 	AddInputsOutputsToTestCaseExecution1752669793000,
 	AddScopeTables1750252139166,
 	AddRolesTables1750252139167,
+	LinkGlobalRoleToUserTable1750252139168,
 ];
