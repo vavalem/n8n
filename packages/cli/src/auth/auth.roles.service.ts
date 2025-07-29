@@ -105,7 +105,7 @@ export class AuthRolesService {
 				.map(([role, existingRole]) => {
 					if (existingRole) {
 						existingRole.displayName = role.name;
-						existingRole.description = role.description;
+						existingRole.description = role.description ?? null;
 						existingRole.roleType = roleNamespace;
 						existingRole.scopes = allScopes.filter((scope) => role.scopes.includes(scope.slug));
 						return existingRole;
@@ -115,7 +115,7 @@ export class AuthRolesService {
 					const newRole = this.roleRepository.create({
 						slug: role.role,
 						displayName: role.name,
-						description: role.description,
+						description: role.description ?? null,
 						roleType: roleNamespace,
 						systemRole: true,
 						scopes: allScopes.filter((scope) => role.scopes.includes(scope.slug)),
