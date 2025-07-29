@@ -51,7 +51,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 			// Ignore if the role already exists
 		}
 
-		await addColumns('user', [column('role_slug').varchar(128).default('global:member').notNull]);
+		await addColumns('user', [column('role_slug').varchar(128).default("'global:member'").notNull]);
 
 		await runQuery(`UPDATE ${userTableName} SET role_slug = role WHERE role != role_slug`);
 
