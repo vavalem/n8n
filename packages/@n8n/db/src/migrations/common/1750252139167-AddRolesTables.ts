@@ -24,7 +24,7 @@ import type { MigrationContext, ReversibleMigration } from '../migration-types';
 export class AddRolesTables1750252139167 implements ReversibleMigration {
 	async up({ schemaBuilder: { createTable, column } }: MigrationContext) {
 		await createTable('role').withColumns(
-			column('slug').text.primary.notNull,
+			column('slug').varchar(128).primary.notNull,
 			column('displayName').text.default(null),
 			column('description').text.default(null),
 			column('roleType').text.default(null),
@@ -34,8 +34,8 @@ export class AddRolesTables1750252139167 implements ReversibleMigration {
 		await createTable('role_scope')
 			.withColumns(
 				column('id').int.primary.autoGenerate2,
-				column('role_slug').text.notNull,
-				column('scope_slug').text.notNull,
+				column('role_slug').varchar(128).notNull,
+				column('scope_slug').varchar(128).notNull,
 			)
 			.withForeignKey('role_slug', {
 				tableName: 'role',

@@ -5,7 +5,11 @@ import type { MigrationContext, ReversibleMigration } from '../migration-types';
  */
 
 export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
-	async up({ schemaBuilder: { addForeignKey }, escape, runQuery }: MigrationContext) {
+	async up({
+		schemaBuilder: { addForeignKey, addColumns, column },
+		escape,
+		runQuery,
+	}: MigrationContext) {
 		const tableName = escape.tableName('role');
 		const userTableName = escape.tableName('user');
 
@@ -47,17 +51,22 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 			// Ignore if the role already exists
 		}
 
+		await addColumns('user', [column('role_slug').varchar(128).default('global:member').notNull]);
+
+		await runQuery(`UPDATE ${userTableName} SET role_slug = role WHERE role != role_slug`);
+
 		// Fallback to 'global:member' for users that do not have a correct role set
 		// This should not happen in a correctly set up system, but we want to ensure
 		// that all users have a role set, before we add the foreign key constraint
 		await runQuery(
-			`UPDATE ${userTableName} SET role = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE slug = role)`,
+			`UPDATE ${userTableName} SET role_slug = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE slug = role_slug)`,
 		);
 
-		await addForeignKey('user', 'role', ['role', 'slug']);
+		await addForeignKey('user', 'role_slug', ['role', 'slug']);
 	}
 
-	async down({ schemaBuilder: { dropForeignKey } }: MigrationContext) {
-		await dropForeignKey('user', 'role', ['role', 'slug']);
+	async down({ schemaBuilder: { dropForeignKey, dropColumns } }: MigrationContext) {
+		await dropForeignKey('user', 'role_slug', ['role', 'slug']);
+		await dropColumns('user', ['role_slug']);
 	}
 }
