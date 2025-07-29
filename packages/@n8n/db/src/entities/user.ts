@@ -65,6 +65,7 @@ export class User extends WithTimestamps implements IUser, AuthPrincipal {
 	@JsonColumn({ nullable: true })
 	settings: IUserSettings | null;
 
+	@Column({ type: String })
 	role: GlobalRole;
 
 	@OneToMany('AuthIdentity', 'user')
