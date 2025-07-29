@@ -16,7 +16,7 @@ export class Scope {
 		nullable: false,
 		name: 'displayName',
 	})
-	displayName: string | null;
+	displayName: string;
 
 	@Column({
 		type: String,

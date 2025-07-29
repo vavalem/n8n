@@ -17,7 +17,7 @@ export class Role {
 		nullable: false,
 		name: 'displayName',
 	})
-	displayName: string | null;
+	displayName: string;
 
 	@Column({
 		type: String,

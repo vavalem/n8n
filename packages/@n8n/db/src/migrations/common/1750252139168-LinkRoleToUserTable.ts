@@ -13,6 +13,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		const tableName = escape.tableName('role');
 		const userTableName = escape.tableName('user');
 		const slugColumn = escape.columnName('slug');
+		const roleColumn = escape.columnName('role');
 		const roleSlugColumn = escape.columnName('roleSlug');
 		const roleTypeColumn = escape.columnName('roleType');
 		const systemRoleColumn = escape.columnName('systemRole');
@@ -58,14 +59,14 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		await addColumns('user', [column('roleSlug').varchar(128).default("'global:member'").notNull]);
 
 		await runQuery(
-			`UPDATE ${userTableName} SET ${roleSlugColumn} = role WHERE role != ${roleSlugColumn}`,
+			`UPDATE ${userTableName} SET ${roleSlugColumn} = ${roleColumn} WHERE ${roleColumn} != ${roleSlugColumn}`,
 		);
 
 		// Fallback to 'global:member' for users that do not have a correct role set
 		// This should not happen in a correctly set up system, but we want to ensure
 		// that all users have a role set, before we add the foreign key constraint
 		await runQuery(
-			`UPDATE ${userTableName} SET ${roleSlugColumn} = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE slug = ${roleSlugColumn})`,
+			`UPDATE ${userTableName} SET ${roleSlugColumn} = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE ${slugColumn} = ${roleSlugColumn})`,
 		);
 
 		await addForeignKey('user', 'roleSlug', ['role', 'slug']);
