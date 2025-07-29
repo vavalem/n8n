@@ -34,24 +34,24 @@ export class AddRolesTables1750252139167 implements ReversibleMigration {
 		await createTable('role_scope')
 			.withColumns(
 				column('id').int.primary.autoGenerate2,
-				column('role_slug').varchar(128).notNull,
-				column('scope_slug').varchar(128).notNull,
+				column('roleSlug').varchar(128).notNull,
+				column('scopeSlug').varchar(128).notNull,
 			)
-			.withForeignKey('role_slug', {
+			.withForeignKey('roleSlug', {
 				tableName: 'role',
 				columnName: 'slug',
 				onDelete: 'CASCADE',
 				onUpdate: 'CASCADE',
 			})
-			.withForeignKey('scope_slug', {
+			.withForeignKey('scopeSlug', {
 				tableName: 'scope',
 				columnName: 'slug',
 				onDelete: 'CASCADE',
 				onUpdate: 'CASCADE',
 			})
-			.withIndexOn('role_slug') // For fast lookup of all scopes for a role
-			.withIndexOn('scope_slug') // For fast lookup of which roles have access to a scope
-			.withIndexOn(['role_slug', 'scope_slug'], true);
+			.withIndexOn('roleSlug') // For fast lookup of all scopes for a role
+			.withIndexOn('scopeSlug') // For fast lookup of which roles have access to a scope
+			.withIndexOn(['roleSlug', 'scopeSlug'], true);
 	}
 
 	async down({ schemaBuilder: { dropTable } }: MigrationContext) {

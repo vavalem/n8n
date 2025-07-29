@@ -44,8 +44,8 @@ export class Role {
 	})
 	@JoinTable({
 		name: 'role_scope',
-		joinColumn: { name: 'role_slug', referencedColumnName: 'slug' },
-		inverseJoinColumn: { name: 'scope_slug', referencedColumnName: 'slug' },
+		joinColumn: { name: 'roleSlug', referencedColumnName: 'slug' },
+		inverseJoinColumn: { name: 'scopeSlug', referencedColumnName: 'slug' },
 	})
 	scopes: Scope[];
 }

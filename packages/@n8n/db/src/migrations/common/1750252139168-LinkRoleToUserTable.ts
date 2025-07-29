@@ -12,11 +12,15 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 	}: MigrationContext) {
 		const tableName = escape.tableName('role');
 		const userTableName = escape.tableName('user');
+		const slugColumn = escape.columnName('slug');
+		const roleSlugColumn = escape.columnName('roleSlug');
+		const roleTypeColumn = escape.columnName('roleType');
+		const systemRoleColumn = escape.columnName('systemRole');
 
 		// Make sure that the global roles that we need exist
 		try {
 			await runQuery(
-				`INSERT INTO ${tableName} (slug, roleType, systemRole) VALUES (:slug, :roleType, :systemRole)`,
+				`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
 				{
 					slug: 'global:owner',
 					roleType: 'global',
@@ -28,7 +32,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		}
 		try {
 			await runQuery(
-				`INSERT INTO ${tableName} (slug, roleType, systemRole) VALUES (:slug, :roleType, :systemRole)`,
+				`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
 				{
 					slug: 'global:admin',
 					roleType: 'global',
@@ -40,7 +44,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		}
 		try {
 			await runQuery(
-				`INSERT INTO ${tableName} (slug, roleType, systemRole) VALUES (:slug, :roleType, :systemRole)`,
+				`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
 				{
 					slug: 'global:member',
 					roleType: 'global',
@@ -51,22 +55,24 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 			// Ignore if the role already exists
 		}
 
-		await addColumns('user', [column('role_slug').varchar(128).default("'global:member'").notNull]);
+		await addColumns('user', [column('roleSlug').varchar(128).default("'global:member'").notNull]);
 
-		await runQuery(`UPDATE ${userTableName} SET role_slug = role WHERE role != role_slug`);
+		await runQuery(
+			`UPDATE ${userTableName} SET ${roleSlugColumn} = role WHERE role != ${roleSlugColumn}`,
+		);
 
 		// Fallback to 'global:member' for users that do not have a correct role set
 		// This should not happen in a correctly set up system, but we want to ensure
 		// that all users have a role set, before we add the foreign key constraint
 		await runQuery(
-			`UPDATE ${userTableName} SET role_slug = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE slug = role_slug)`,
+			`UPDATE ${userTableName} SET ${roleSlugColumn} = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE slug = ${roleSlugColumn})`,
 		);
 
-		await addForeignKey('user', 'role_slug', ['role', 'slug']);
+		await addForeignKey('user', 'roleSlug', ['role', 'slug']);
 	}
 
 	async down({ schemaBuilder: { dropForeignKey, dropColumns } }: MigrationContext) {
-		await dropForeignKey('user', 'role_slug', ['role', 'slug']);
-		await dropColumns('user', ['role_slug']);
+		await dropForeignKey('user', 'roleSlug', ['role', 'slug']);
+		await dropColumns('user', ['roleSlug']);
 	}
 }
