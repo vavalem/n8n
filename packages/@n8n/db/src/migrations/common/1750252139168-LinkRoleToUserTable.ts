@@ -4,7 +4,7 @@ import type { MigrationContext, ReversibleMigration } from '../migration-types';
  * This migration
  */
 
-export class LinkGlobalRoleToUserTable1750252139168 implements ReversibleMigration {
+export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 	async up({ schemaBuilder: { addForeignKey }, escape, runQuery }: MigrationContext) {
 		const tableName = escape.tableName('role');
 		const userTableName = escape.tableName('user');

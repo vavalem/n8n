@@ -1,16 +1,14 @@
 import { Logger } from '@n8n/backend-common';
-import { GlobalRoleRepository, Scope, ScopeRepository } from '@n8n/db';
-import { BaseRole } from '@n8n/db/src/entities/base-role';
+import { RoleRepository, Scope, ScopeRepository } from '@n8n/db';
 import { Service } from '@n8n/di';
 import { ALL_SCOPES, ALL_ROLES, scopeInformation } from '@n8n/permissions';
-import { Repository } from '@n8n/typeorm';
 
 @Service()
 export class AuthRolesService {
 	constructor(
 		private readonly logger: Logger,
 		private readonly scopeRepository: ScopeRepository,
-		private readonly globalRoleRepository: GlobalRoleRepository,
+		private readonly roleRepository: RoleRepository,
 	) {}
 
 	private async syncScopes() {
@@ -64,13 +62,14 @@ export class AuthRolesService {
 		}
 	}
 
-	private async syncRoles(repository: Repository<BaseRole>, roleNamespace: keyof typeof ALL_ROLES) {
-		const existingRoles = await repository.find({
+	private async syncRoles() {
+		const existingRoles = await this.roleRepository.find({
 			select: {
 				slug: true,
 				displayName: true,
 				description: true,
 				systemRole: true,
+				roleType: true,
 			},
 			where: {
 				systemRole: true,
@@ -83,55 +82,60 @@ export class AuthRolesService {
 			},
 		});
 
-		const rolesToUpdate = ALL_ROLES[roleNamespace]
-			.map((role) => {
-				const existingRole = existingRoles.find((r) => r.slug === role.role);
-				return [role, existingRole] as const;
-			})
-			.filter(([role, existingRole]) => {
-				// If the role exists, check if it needs to be updated
-				if (existingRole) {
-					return (
-						existingRole.displayName !== role.name ||
-						existingRole.description !== role.description ||
-						existingRole.scopes.some((scope) => !role.scopes.includes(scope.slug)) || // DB roles has scope that it should not have
-						role.scopes.some((scope) => !existingRole.scopes.some((s) => s.slug === scope)) // A role has scope that is not in DB
-					);
-				}
-				// If the role does not exist, it needs to be created
-				return true;
-			})
-			.map(([role, existingRole]) => {
-				if (existingRole) {
-					existingRole.displayName = role.name;
-					existingRole.description = role.description;
-					existingRole.scopes = allScopes.filter((scope) => role.scopes.includes(scope.slug));
-					return existingRole;
-				}
+		for (const roleNamespace of Object.keys(ALL_ROLES) as Array<keyof typeof ALL_ROLES>) {
+			const rolesToUpdate = ALL_ROLES[roleNamespace]
+				.map((role) => {
+					const existingRole = existingRoles.find((r) => r.slug === role.role);
+					return [role, existingRole] as const;
+				})
+				.filter(([role, existingRole]) => {
+					// If the role exists, check if it needs to be updated
+					if (existingRole) {
+						return (
+							existingRole.displayName !== role.name ||
+							existingRole.description !== role.description ||
+							existingRole.roleType !== roleNamespace ||
+							existingRole.scopes.some((scope) => !role.scopes.includes(scope.slug)) || // DB roles has scope that it should not have
+							role.scopes.some((scope) => !existingRole.scopes.some((s) => s.slug === scope)) // A role has scope that is not in DB
+						);
+					}
+					// If the role does not exist, it needs to be created
+					return true;
+				})
+				.map(([role, existingRole]) => {
+					if (existingRole) {
+						existingRole.displayName = role.name;
+						existingRole.description = role.description;
+						existingRole.roleType = roleNamespace;
+						existingRole.scopes = allScopes.filter((scope) => role.scopes.includes(scope.slug));
+						return existingRole;
+					}
 
-				// If the role does not exist, create a new one
-				const newRole = repository.create({
-					slug: role.role,
-					displayName: role.name,
-					description: role.description,
-					systemRole: true,
-					scopes: allScopes.filter((scope) => role.scopes.includes(scope.slug)),
+					// If the role does not exist, create a new one
+					const newRole = this.roleRepository.create({
+						slug: role.role,
+						displayName: role.name,
+						description: role.description,
+						roleType: roleNamespace,
+						systemRole: true,
+						scopes: allScopes.filter((scope) => role.scopes.includes(scope.slug)),
+					});
+					return newRole;
 				});
-				return newRole;
-			});
-		if (rolesToUpdate.length > 0) {
-			this.logger.info(`Updating ${rolesToUpdate.length} ${roleNamespace} roles...`);
-			await repository.save(rolesToUpdate);
-			this.logger.info(`${roleNamespace} roles updated successfully.`);
-		} else {
-			this.logger.info(`No ${roleNamespace} roles to update.`);
+			if (rolesToUpdate.length > 0) {
+				this.logger.info(`Updating ${rolesToUpdate.length} ${roleNamespace} roles...`);
+				await this.roleRepository.save(rolesToUpdate);
+				this.logger.info(`${roleNamespace} roles updated successfully.`);
+			} else {
+				this.logger.info(`No ${roleNamespace} roles to update.`);
+			}
 		}
 	}
 
 	async init() {
 		this.logger.info('Initializing AuthRolesService...');
 		await this.syncScopes();
-		await this.syncRoles(this.globalRoleRepository, 'global');
+		await this.syncRoles();
 		this.logger.info('AuthRolesService initialized successfully.');
 	}
 }

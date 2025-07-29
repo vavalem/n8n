@@ -37,7 +37,7 @@ export class Role {
 		type: String,
 		name: 'roleType',
 	})
-	roleType: 'global' | 'project';
+	roleType: 'global' | 'project' | 'workflow' | 'credential'; // Type of the role, e.g., global, project, or workflow
 
 	@ManyToMany(() => Scope, {
 		eager: true,
