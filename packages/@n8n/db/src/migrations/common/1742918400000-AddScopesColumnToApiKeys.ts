@@ -1,10 +1,10 @@
-import type { BuildInGlobalRole } from '@n8n/permissions';
+import type { GlobalRole } from '@n8n/permissions';
 import { getApiKeyScopesForRole } from '@n8n/permissions';
 
 import { ApiKey } from '../../entities';
 import type { MigrationContext, ReversibleMigration } from '../migration-types';
 
-type ApiKeyWithRole = { id: string; role: BuildInGlobalRole };
+type ApiKeyWithRole = { id: string; role: GlobalRole };
 
 export class AddScopesColumnToApiKeys1742918400000 implements ReversibleMigration {
 	async up({
