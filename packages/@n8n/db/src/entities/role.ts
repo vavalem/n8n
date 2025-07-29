@@ -1,12 +1,11 @@
-import { Column, PrimaryColumn } from '@n8n/typeorm';
+import { Column, Entity, JoinTable, ManyToMany, PrimaryColumn } from '@n8n/typeorm';
 
 import { Scope } from './scope';
 
-/**
- * Base class for roles, which can be extended for specific role types.
- * This class defines the common properties that all roles will have.
- */
-export abstract class BaseRole {
+@Entity({
+	name: 'role',
+})
+export class Role {
 	@PrimaryColumn({
 		type: String,
 		name: 'slug',
@@ -34,5 +33,19 @@ export abstract class BaseRole {
 	})
 	systemRole: boolean; // Indicates if the role is managed by the system and cannot be edited
 
-	abstract scopes: Scope[];
+	@Column({
+		type: String,
+		name: 'roleType',
+	})
+	roleType: 'global' | 'project';
+
+	@ManyToMany(() => Scope, {
+		eager: true,
+	})
+	@JoinTable({
+		name: 'role_scope',
+		joinColumn: { name: 'role_slug', referencedColumnName: 'slug' },
+		inverseJoinColumn: { name: 'scope_slug', referencedColumnName: 'slug' },
+	})
+	scopes: Scope[];
 }

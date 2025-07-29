@@ -6,31 +6,43 @@ import type { MigrationContext, ReversibleMigration } from '../migration-types';
 
 export class LinkGlobalRoleToUserTable1750252139168 implements ReversibleMigration {
 	async up({ schemaBuilder: { addForeignKey }, escape, runQuery }: MigrationContext) {
-		const tableName = escape.tableName('global_role');
+		const tableName = escape.tableName('role');
 		const userTableName = escape.tableName('user');
 
 		// Make sure that the global roles that we need exist
 		try {
-			await runQuery(`INSERT INTO ${tableName} (slug, systemRole) VALUES (:slug, :systemRole)`, {
-				slug: 'global:owner',
-				systemRole: true,
-			});
+			await runQuery(
+				`INSERT INTO ${tableName} (slug, roleType, systemRole) VALUES (:slug, :roleType, :systemRole)`,
+				{
+					slug: 'global:owner',
+					roleType: 'global',
+					systemRole: true,
+				},
+			);
 		} catch (error) {
 			// Ignore if the role already exists
 		}
 		try {
-			await runQuery(`INSERT INTO ${tableName} (slug, systemRole) VALUES (:slug, :systemRole)`, {
-				slug: 'global:admin',
-				systemRole: true,
-			});
+			await runQuery(
+				`INSERT INTO ${tableName} (slug, roleType, systemRole) VALUES (:slug, :roleType, :systemRole)`,
+				{
+					slug: 'global:admin',
+					roleType: 'global',
+					systemRole: true,
+				},
+			);
 		} catch (error) {
 			// Ignore if the role already exists
 		}
 		try {
-			await runQuery(`INSERT INTO ${tableName} (slug, systemRole) VALUES (:slug, :systemRole)`, {
-				slug: 'global:member',
-				systemRole: true,
-			});
+			await runQuery(
+				`INSERT INTO ${tableName} (slug, roleType, systemRole) VALUES (:slug, :roleType, :systemRole)`,
+				{
+					slug: 'global:member',
+					roleType: 'global',
+					systemRole: true,
+				},
+			);
 		} catch (error) {
 			// Ignore if the role already exists
 		}
@@ -42,10 +54,10 @@ export class LinkGlobalRoleToUserTable1750252139168 implements ReversibleMigrati
 			`UPDATE ${userTableName} SET role = 'global:member' WHERE NOT EXISTS (SELECT 1 FROM ${tableName} WHERE slug = role)`,
 		);
 
-		await addForeignKey('user', 'role', ['global_role', 'slug']);
+		await addForeignKey('user', 'role', ['role', 'slug']);
 	}
 
 	async down({ schemaBuilder: { dropForeignKey } }: MigrationContext) {
-		await dropForeignKey('user', 'role', ['global_role', 'slug']);
+		await dropForeignKey('user', 'role', ['role', 'slug']);
 	}
 }
