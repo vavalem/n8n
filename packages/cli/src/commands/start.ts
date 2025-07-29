@@ -17,6 +17,8 @@ import { BaseCommand } from './base-command';
 
 import { ActiveExecutions } from '@/active-executions';
 import { ActiveWorkflowManager } from '@/active-workflow-manager';
+import { AuthRolesService } from '@/auth/auth.roles.service';
+import { CommunityPackagesConfig } from '@/community-packages/community-packages.config';
 import config from '@/config';
 import { EDITOR_UI_DIST_DIR } from '@/constants';
 import { FeatureNotLicensedError } from '@/errors/feature-not-licensed.error';
