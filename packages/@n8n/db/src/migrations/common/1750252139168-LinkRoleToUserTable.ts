@@ -21,16 +21,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 
 		// Make sure that the global roles that we need exist
 		for (const role of ['global:owner', 'global:admin', 'global:member']) {
-			if (dbType === 'sqlite') {
-				await runQuery(
-					`INSERT OR REPLACE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON CONFLICT DO NOTHING`,
-					{
-						slug: role,
-						roleType: 'global',
-						systemRole: true,
-					},
-				);
-			} else if (dbType === 'postgresdb') {
+			if (dbType === 'sqlite' || dbType === 'postgresdb') {
 				await runQuery(
 					`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON CONFLICT DO NOTHING`,
 					{

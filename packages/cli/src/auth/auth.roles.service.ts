@@ -25,33 +25,27 @@ export class AuthRolesService {
 				displayName: slug,
 				description: null,
 			};
-			return [slug, info.displayName, info.description ?? null] as const;
-		})
-			.filter(([slug, displayName, description]) => {
-				const existingScope = availableScopes.find((scope) => scope.slug === slug);
-				if (existingScope) {
-					// Check if the existing scope needs to be updated
-					return (
-						existingScope.displayName !== displayName || existingScope.description !== description
-					);
-				}
-				// If the scope does not exist, it needs to be created, so we return true
-				return true;
-			})
-			.map(([slug, displayName, sourceDescription]) => {
-				const existingScope = availableScopes.find((scope) => scope.slug === slug);
-				if (existingScope) {
-					existingScope.displayName = displayName;
-					existingScope.description = sourceDescription ?? null;
-					return existingScope;
-				}
-				// If the scope does not exist, return a new object
+
+			const existingScope = availableScopes.find((scope) => scope.slug === slug);
+			if (!existingScope) {
 				const newScope = new Scope();
 				newScope.slug = slug;
-				newScope.displayName = displayName;
-				newScope.description = sourceDescription ?? null;
+				newScope.displayName = info.displayName;
+				newScope.description = info.description ?? null;
 				return newScope;
-			});
+			}
+
+			const needsUpdate =
+				existingScope.displayName !== info.displayName ||
+				existingScope.description !== info.description;
+
+			if (needsUpdate) {
+				existingScope.displayName = info.displayName;
+				existingScope.description = info.description ?? null;
+				return existingScope;
+			}
+			return null;
+		}).filter((scope) => scope !== null);
 
 		if (scopesToUpdate.length > 0) {
 			this.logger.info(`Updating ${scopesToUpdate.length} scopes...`);
@@ -86,24 +80,27 @@ export class AuthRolesService {
 			const rolesToUpdate = ALL_ROLES[roleNamespace]
 				.map((role) => {
 					const existingRole = existingRoles.find((r) => r.slug === role.role);
-					return [role, existingRole] as const;
-				})
-				.filter(([role, existingRole]) => {
-					// If the role exists, check if it needs to be updated
-					if (existingRole) {
-						return (
-							existingRole.displayName !== role.name ||
-							existingRole.description !== role.description ||
-							existingRole.roleType !== roleNamespace ||
-							existingRole.scopes.some((scope) => !role.scopes.includes(scope.slug)) || // DB roles has scope that it should not have
-							role.scopes.some((scope) => !existingRole.scopes.some((s) => s.slug === scope)) // A role has scope that is not in DB
-						);
+
+					if (!existingRole) {
+						const newRole = this.roleRepository.create({
+							slug: role.role,
+							displayName: role.name,
+							description: role.description ?? null,
+							roleType: roleNamespace,
+							systemRole: true,
+							scopes: allScopes.filter((scope) => role.scopes.includes(scope.slug)),
+						});
+						return newRole;
 					}
-					// If the role does not exist, it needs to be created
-					return true;
-				})
-				.map(([role, existingRole]) => {
-					if (existingRole) {
+
+					const needsUpdate =
+						existingRole.displayName !== role.name ||
+						existingRole.description !== role.description ||
+						existingRole.roleType !== roleNamespace ||
+						existingRole.scopes.some((scope) => !role.scopes.includes(scope.slug)) || // DB roles has scope that it should not have
+						role.scopes.some((scope) => !existingRole.scopes.some((s) => s.slug === scope)); // A role has scope that is not in DB
+
+					if (needsUpdate) {
 						existingRole.displayName = role.name;
 						existingRole.description = role.description ?? null;
 						existingRole.roleType = roleNamespace;
@@ -111,17 +108,9 @@ export class AuthRolesService {
 						return existingRole;
 					}
 
-					// If the role does not exist, create a new one
-					const newRole = this.roleRepository.create({
-						slug: role.role,
-						displayName: role.name,
-						description: role.description ?? null,
-						roleType: roleNamespace,
-						systemRole: true,
-						scopes: allScopes.filter((scope) => role.scopes.includes(scope.slug)),
-					});
-					return newRole;
-				});
+					return null;
+				})
+				.filter((role) => role !== null);
 			if (rolesToUpdate.length > 0) {
 				this.logger.info(`Updating ${rolesToUpdate.length} ${roleNamespace} roles...`);
 				await this.roleRepository.save(rolesToUpdate);
