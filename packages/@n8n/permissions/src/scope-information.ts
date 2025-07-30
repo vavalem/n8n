@@ -2,16 +2,13 @@ import { RESOURCES } from './constants.ee';
 import type { Scope, ScopeInformation } from './types.ee';
 
 function buildResourceScopes() {
-	const resourceScope = Object.keys(RESOURCES).flatMap((resource) => {
-		const operations = RESOURCES[resource as keyof typeof RESOURCES];
-		const resourceScope = operations.map(
-			(operation) => `${resource}:${operation}` as const,
-		) as string[];
-		resourceScope.push(`${resource}:*` as const); // Add wildcard for all operations on this resource
-		return resourceScope;
-	}) as Scope[];
-	resourceScope.push('*' as const); // Add wildcard scope
-	return resourceScope;
+	const resourceScopes = Object.entries(RESOURCES).flatMap(([resource, operations]) => [
+		...operations.map((op) => `${resource}:${op}` as const),
+		`${resource}:*` as const,
+	]) as Scope[];
+
+	resourceScopes.push('*' as const); // Global wildcard
+	return resourceScopes;
 }
 
 export const ALL_SCOPES = buildResourceScopes();

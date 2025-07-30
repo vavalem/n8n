@@ -8,6 +8,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 	async up({
 		schemaBuilder: { addForeignKey, addColumns, column },
 		escape,
+		dbType,
 		runQuery,
 	}: MigrationContext) {
 		const tableName = escape.tableName('role');
@@ -19,41 +20,36 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		const systemRoleColumn = escape.columnName('systemRole');
 
 		// Make sure that the global roles that we need exist
-		try {
-			await runQuery(
-				`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
-				{
-					slug: 'global:owner',
-					roleType: 'global',
-					systemRole: true,
-				},
-			);
-		} catch (error) {
-			// Ignore if the role already exists
-		}
-		try {
-			await runQuery(
-				`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
-				{
-					slug: 'global:admin',
-					roleType: 'global',
-					systemRole: true,
-				},
-			);
-		} catch (error) {
-			// Ignore if the role already exists
-		}
-		try {
-			await runQuery(
-				`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
-				{
-					slug: 'global:member',
-					roleType: 'global',
-					systemRole: true,
-				},
-			);
-		} catch (error) {
-			// Ignore if the role already exists
+		for (const role of ['global:owner', 'global:admin', 'global:member']) {
+			if (dbType === 'sqlite') {
+				await runQuery(
+					`INSERT OR REPLACE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
+					{
+						slug: role,
+						roleType: 'global',
+						systemRole: true,
+					},
+				);
+			} else if (dbType === 'postgresdb') {
+				await runQuery(
+					`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON CONFLICT DO NOTHING`,
+					{
+						slug: role,
+						roleType: 'global',
+						systemRole: true,
+					},
+				);
+			} else {
+				// For MySQL and MariaDB, we use a different syntax
+				await runQuery(
+					`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON DUPLICATE KEY UPDATE ${slugColumn} = ${slugColumn}`,
+					{
+						slug: role,
+						roleType: 'global',
+						systemRole: true,
+					},
+				);
+			}
 		}
 
 		await addColumns('user', [column('roleSlug').varchar(128).default("'global:member'").notNull]);
