@@ -23,7 +23,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		for (const role of ['global:owner', 'global:admin', 'global:member']) {
 			if (dbType === 'sqlite') {
 				await runQuery(
-					`INSERT OR REPLACE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
+					`INSERT OR REPLACE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON CONFLICT DO NOTHING`,
 					{
 						slug: role,
 						roleType: 'global',
@@ -42,7 +42,7 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 			} else {
 				// For MySQL and MariaDB, we use a different syntax
 				await runQuery(
-					`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON DUPLICATE KEY UPDATE ${slugColumn} = ${slugColumn}`,
+					`INSERT IGNORE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
 					{
 						slug: role,
 						roleType: 'global',

@@ -1,7 +1,7 @@
 import type { MigrationContext, ReversibleMigration } from '../migration-types';
 
 /*
- * We introduce roles tables, these will hold all roles that we know about
+ * We introduce roles table, this will hold all roles that we know about
  *
  * There are roles that can't be edited by users, these are marked as system-only and will
  * be managed by the system itself. On every startup, the system will ensure
@@ -13,11 +13,9 @@ import type { MigrationContext, ReversibleMigration } from '../migration-types';
  * displayName | Text | Name used to display in the UI
  * description | Text | Text describing the scope in more detail of users
  * roleType    | Text | Text type of role, such as 'global', 'project', etc.
- * system-role | Bool | Indicates if the role is managed by the system and cannot be edited by users
+ * systemRole  | Bool | Indicates if the role is managed by the system and cannot be edited by users
  *
- * Each role table will have a unique slug for each role.
- *
- * For each role table there is a junction table that will hold the
+ * For the role table there is a junction table that will hold the
  * relationships between the roles and the scopes that are associated with them.
  */
 
