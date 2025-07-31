@@ -1,4 +1,5 @@
 import { AddMfaColumns1690000000030 } from './../common/1690000000040-AddMfaColumns';
+import { LinkRoleToProjectRelationTable1753953244168 } from './../common/1753953244168-LinkRoleToProjectRelationTable';
 import { InitialMigration1588157391238 } from './1588157391238-InitialMigration';
 import { WebhookModel1592447867632 } from './1592447867632-WebhookModel';
 import { CreateIndexStoppedAt1594902918301 } from './1594902918301-CreateIndexStoppedAt';
@@ -193,4 +194,5 @@ export const mysqlMigrations: Migration[] = [
 	LinkRoleToUserTable1750252139168,
 	AddInputsOutputsToTestCaseExecution1752669793000,
 	AddScopeTables1750252139166,
+	LinkRoleToProjectRelationTable1753953244168,
 ];
