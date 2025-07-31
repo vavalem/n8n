@@ -19,28 +19,18 @@ export class LinkRoleToUserTable1750252139168 implements ReversibleMigration {
 		const roleTypeColumn = escape.columnName('roleType');
 		const systemRoleColumn = escape.columnName('systemRole');
 
+		const isPostgresOrSqlite = dbType === 'postgresdb' || dbType === 'sqlite';
+		const query = isPostgresOrSqlite
+			? `INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON CONFLICT DO NOTHING`
+			: `INSERT IGNORE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`;
+
 		// Make sure that the global roles that we need exist
 		for (const role of ['global:owner', 'global:admin', 'global:member']) {
-			if (dbType === 'sqlite' || dbType === 'postgresdb') {
-				await runQuery(
-					`INSERT INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole) ON CONFLICT DO NOTHING`,
-					{
-						slug: role,
-						roleType: 'global',
-						systemRole: true,
-					},
-				);
-			} else {
-				// For MySQL and MariaDB, we use a different syntax
-				await runQuery(
-					`INSERT IGNORE INTO ${tableName} (${slugColumn}, ${roleTypeColumn}, ${systemRoleColumn}) VALUES (:slug, :roleType, :systemRole)`,
-					{
-						slug: role,
-						roleType: 'global',
-						systemRole: true,
-					},
-				);
-			}
+			await runQuery(query, {
+				slug: role,
+				roleType: 'global',
+				systemRole: true,
+			});
 		}
 
 		await addColumns('user', [column('roleSlug').varchar(128).default("'global:member'").notNull]);
