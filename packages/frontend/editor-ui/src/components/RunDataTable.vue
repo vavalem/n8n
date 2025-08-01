@@ -269,12 +269,16 @@ function getValueToRender(value: unknown): string {
 		return i18n.baseText('runData.emptyObject');
 	}
 	if (value === null || value === undefined) {
-		return `[${value}]`;
+		return `${value}`;
 	}
 	if (value === true || value === false || typeof value === 'number') {
 		return value.toString();
 	}
 	return JSON.stringify(value);
+}
+
+function isNullOrUndefined(value: unknown): boolean {
+	return value === null || value === undefined;
 }
 
 function onDragStart(el: HTMLElement, data?: string) {
@@ -721,7 +725,11 @@ watch(
 							v-if="isSimple(data)"
 							:content="getValueToRender(data)"
 							:search="search"
-							:class="{ [$style.value]: true, [$style.empty]: isEmpty(data) }"
+							:class="{
+								[$style.value]: true,
+								[$style.empty]: isEmpty(data),
+								[$style.nullValue]: isNullOrUndefined(data),
+							}"
 						/>
 						<N8nTree v-else-if="isObject(data)" :node-class="$style.nodeClass" :value="data">
 							<template #label="{ label, path }">
@@ -747,7 +755,11 @@ watch(
 								<TextWithHighlights
 									:content="getValueToRender(value)"
 									:search="search"
-									:class="{ [$style.nestedValue]: true, [$style.empty]: isEmpty(value) }"
+									:class="{
+										[$style.nestedValue]: true,
+										[$style.empty]: isEmpty(value),
+										[$style.nullValue]: isNullOrUndefined(value),
+									}"
 								/>
 							</template>
 						</N8nTree>
@@ -957,6 +969,10 @@ th.isCollapsingColumn + th {
 
 .empty {
 	color: var(--color-danger);
+}
+
+.nullValue {
+	font-style: italic;
 }
 
 .limitColWidth {
