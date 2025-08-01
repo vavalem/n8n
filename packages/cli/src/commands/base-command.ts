@@ -9,7 +9,7 @@ import {
 } from '@n8n/backend-common';
 import { GlobalConfig } from '@n8n/config';
 import { LICENSE_FEATURES } from '@n8n/constants';
-import { DbConnection } from '@n8n/db';
+import { AuthRolesService, DbConnection } from '@n8n/db';
 import { Container } from '@n8n/di';
 import {
 	BinaryDataConfig,
@@ -22,7 +22,6 @@ import {
 import { ensureError, sleep, UnexpectedError, UserError } from 'n8n-workflow';
 
 import type { AbstractServer } from '@/abstract-server';
-import { AuthRolesService } from '@/auth/auth.roles.service';
 import { CommunityPackagesConfig } from '@/community-packages/community-packages.config';
 import config from '@/config';
 import { N8N_VERSION, N8N_RELEASE_DATE } from '@/constants';
@@ -120,6 +119,8 @@ export abstract class BaseCommand<F = never> {
 				async (error: Error) =>
 					await this.exitWithCrash('There was an error running database migrations', error),
 			);
+
+		await Container.get(AuthRolesService).init();
 
 		Container.get(DeprecationService).warn();
 
