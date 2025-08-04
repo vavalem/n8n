@@ -12,8 +12,19 @@ import {
 import type { BaseChatMemory } from 'langchain/memory';
 import type { DynamicStructuredTool, Tool } from 'langchain/tools';
 import omit from 'lodash/omit';
-import { jsonParse, NodeOperationError, sleep } from 'n8n-workflow';
-import type { IExecuteFunctions, INodeExecutionData, ISupplyDataFunctions } from 'n8n-workflow';
+import {
+	jsonParse,
+	NodeConnectionTypes,
+	nodeNameToToolName,
+	NodeOperationError,
+	sleep,
+} from 'n8n-workflow';
+import type {
+	Foo,
+	IExecuteFunctions,
+	INodeExecutionData,
+	ISupplyDataFunctions,
+} from 'n8n-workflow';
 import assert from 'node:assert';
 
 import { getPromptInputByType } from '@utils/helpers';
@@ -32,11 +43,12 @@ import {
 	preparePrompt,
 } from '../common';
 import { SYSTEM_MESSAGE } from '../prompt';
+import { connect } from 'node:tls';
 
 /**
  * Creates an agent executor with the given configuration
  */
-function createAgentExecutor(
+function createAgentSequence(
 	model: BaseChatModel,
 	tools: Array<DynamicStructuredTool | Tool>,
 	prompt: ChatPromptTemplate,
@@ -67,16 +79,9 @@ function createAgentExecutor(
 		fixEmptyContentMessage,
 	]) as AgentRunnableSequence;
 
-	runnableAgent.singleAction = false;
+	runnableAgent.singleAction = true;
 	runnableAgent.streamRunnable = false;
-
-	return AgentExecutor.fromAgentAndTools({
-		agent: runnableAgent,
-		memory,
-		tools,
-		returnIntermediateSteps: options.returnIntermediateSteps === true,
-		maxIterations: options.maxIterations ?? 10,
-	});
+	return runnableAgent;
 }
 
 async function processEventStream(
@@ -177,10 +182,11 @@ async function processEventStream(
  */
 export async function toolsAgentExecute(
 	this: IExecuteFunctions | ISupplyDataFunctions,
-): Promise<INodeExecutionData[][]> {
+): Promise<INodeExecutionData[][] | Foo> {
+	const steps = [];
 	this.logger.debug('Executing Tools Agent V2');
 
-	const returnData: INodeExecutionData[] = [];
+	const returnData: INodeExecutionData[] | Foo[] = [];
 	const items = this.getInputData();
 	const batchSize = this.getNodeParameter('options.batching.batchSize', 0, 1) as number;
 	const delayBetweenBatches = this.getNodeParameter(
@@ -236,7 +242,7 @@ export async function toolsAgentExecute(
 			const prompt: ChatPromptTemplate = preparePrompt(messages);
 
 			// Create executors for primary and fallback models
-			const executor = createAgentExecutor(
+			const executor = createAgentSequence(
 				model,
 				tools,
 				prompt,
@@ -247,6 +253,7 @@ export async function toolsAgentExecute(
 			);
 			// Invoke with fallback logic
 			const invokeParams = {
+				steps,
 				input,
 				system_message: options.systemMessage ?? SYSTEM_MESSAGE,
 				formatting_instructions:
@@ -283,7 +290,24 @@ export async function toolsAgentExecute(
 				);
 			} else {
 				// Handle regular execution
-				return await executor.invoke(invokeParams, executeOptions);
+				const response = await executor.invoke(invokeParams);
+
+				if ('returnValues' in response) {
+					return response;
+				}
+
+				const connectedSubnodes = this.getConnectedNodes(NodeConnectionTypes.AiTool);
+
+				// If response contains tool calls, we need to return this in the right format
+				const actions: Foo = response.map((action) => ({
+					nodeName: connectedSubnodes.find((node) => nodeNameToToolName(node.name) === action.tool)
+						?.name,
+					input: action.toolInput,
+					type: NodeConnectionTypes.AiTool,
+					id: action.toolCallId,
+				}));
+
+				return { actions };
 			}
 		});
 
@@ -306,6 +330,10 @@ export async function toolsAgentExecute(
 				}
 			}
 			const response = result.value;
+			if ('actions' in response) {
+				returnData.push(response);
+				return;
+			}
 			// If memory and outputParser are connected, parse the output.
 			if (memory && outputParser) {
 				const parsedOutput = jsonParse<{ output: Record<string, unknown> }>(
@@ -334,6 +362,9 @@ export async function toolsAgentExecute(
 			await sleep(delayBetweenBatches);
 		}
 	}
+	if ('actions' in returnData[0]) {
+		return returnData[0] as Foo;
+	}
 
-	return [returnData];
+	return [returnData] as INodeExecutionData[][];
 }

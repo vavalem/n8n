@@ -13,6 +13,7 @@ import type {
 	IRunExecutionData,
 	ITaskDataConnections,
 	IWorkflowExecuteAdditionalData,
+	NodeConnectionType,
 	NodeExecutionHint,
 	Result,
 	StructuredChunk,
@@ -223,6 +224,10 @@ export class ExecuteContext extends BaseExecuteContext implements IExecuteFuncti
 			return [];
 		}
 		return super.getInputItems(inputIndex, connectionType) ?? [];
+	}
+
+	getSubnodes(connectionType: NodeConnectionType): string[] {
+		return this.workflow.getParentNodes(this.node.name, connectionType);
 	}
 
 	logNodeOutput(...args: unknown[]): void {

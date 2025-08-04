@@ -938,6 +938,7 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 		getInputData(inputIndex?: number, connectionType?: NodeConnectionType): INodeExecutionData[];
 		getNodeInputs(): INodeInputConfiguration[];
 		getNodeOutputs(): INodeOutputConfiguration[];
+		getSubnodes(connectionType: NodeConnectionType): string[];
 		putExecutionToWait(waitTill: Date): Promise<void>;
 		sendMessageToUI(message: any): void;
 		sendResponse(response: IExecuteResponsePromiseData): void;
@@ -1715,6 +1716,7 @@ export type Foo = {
 	actions: Array<{
 		nodeName: string;
 		input: string | Record<string, unknown>;
+		type: NodeConnectionType;
 		id: string;
 	}>;
 };

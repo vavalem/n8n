@@ -615,7 +615,7 @@ export class WorkflowExecute {
 
 		// Check if node has multiple inputs as then we have to wait for all input data
 		// to be present before we can add it to the node-execution-stack
-		if (workflow.connectionsByDestinationNode[connectionData.node].main.length > 1) {
+		if (workflow.connectionsByDestinationNode[connectionData.node]?.main.length > 1) {
 			// Node has multiple inputs
 			let nodeWasWaiting = true;
 
@@ -1792,20 +1792,38 @@ export class WorkflowExecute {
 
 								// if runNodeData is Foo
 								if ('actions' in runNodeData) {
+									// Add back agent node
 									for (const action of runNodeData.actions) {
 										const node = workflow.getNode(action.nodeName);
-										const connections =
-											workflow.connectionsBySourceNode[action.nodeName][executionNode.name][0];
+										const agentConnections = workflow.connectionsBySourceNode[action.nodeName][
+											action.type
+										].filter((connections) =>
+											connections!.find((connection) => connection.node === executionNode.name),
+										)[0];
+										const connections = workflow.connectionsByDestinationNode[executionNode.name][
+											action.type
+										].filter((connections) =>
+											connections!.find((connection) => connection.node === action.nodeName),
+										)[0];
 
-										if (node && connections) {
+										if (node && connections && agentConnections) {
+											node.rewireOutputLogTo = action.type;
+											// Add the agent node to be executed again
+											this.addNodeToBeExecuted(
+												workflow,
+												agentConnections[0],
+												0,
+												action.nodeName, // TODO: replace with real parent node
+												executionData.data.main as INodeExecutionData[][],
+												runIndex,
+											);
 											// 2. put actions nodes on the stack
 											this.addNodeToBeExecuted(
 												workflow,
 												connections[0],
 												0,
 												executionNode.name,
-												// TODO: fix this
-												// nodeSuccessData,
+												// TODO: fix this,
 												[],
 												runIndex,
 											);
@@ -1847,7 +1865,7 @@ export class WorkflowExecute {
 													executionNode.name,
 													// TODO: fix this
 													// nodeSuccessData,
-													[],
+													[[{ json: action.input as IDataObject }]],
 													runIndex,
 												);
 											}
