@@ -1,13 +1,15 @@
-import type {
-	DataStoreCreateColumnSchema,
-	DataStoreListOptions,
-	DataStoreUserTableName,
+import {
+	DATA_STORE_COLUMN_REGEX,
+	type DataStoreCreateColumnSchema,
+	type ListDataStoreQueryDto,
 } from '@n8n/api-types';
+import { DslColumn, CreateTable } from '@n8n/db';
 import { Service } from '@n8n/di';
-import { DataSource, Repository, SelectQueryBuilder } from '@n8n/typeorm';
+import { DataSource, EntityManager, Repository, SelectQueryBuilder } from '@n8n/typeorm';
+import { UnexpectedError } from 'n8n-workflow';
 
 import { DataStoreEntity } from './data-store.entity';
-import { createUserTableQuery } from './utils/sql-utils';
+import { createUserTableQuery, toDslColumns, toTableName } from './utils/sql-utils';
 
 @Service()
 export class DataStoreRepository extends Repository<DataStoreEntity> {
@@ -15,27 +17,94 @@ export class DataStoreRepository extends Repository<DataStoreEntity> {
 		super(DataStoreEntity, dataSource.manager);
 	}
 
-	async createUserTable(tableName: DataStoreUserTableName, columns: DataStoreCreateColumnSchema[]) {
-		const dbType = this.manager.connection.options.type;
-		await this.manager.query(createUserTableQuery(tableName, columns, dbType));
+	async createUserTableRaw(
+		projectId: string,
+		name: string,
+		columns: DataStoreCreateColumnSchema[],
+	) {
+		return await this.manager.transaction(async (em) => {
+			const dataStore = em.create(DataStoreEntity, { name, columns, projectId });
+			await em.insert(DataStoreEntity, dataStore);
+			const dbType = em.connection.options.type;
+			await em.query(createUserTableQuery(toTableName(dataStore.id), columns, dbType));
+			return dataStore;
+		});
 	}
 
-	async deleteUserTable(tableName: DataStoreUserTableName) {
-		await this.manager.query(`DROP TABLE ${tableName}`);
+	async createUserTable(projectId: string, name: string, columns: DataStoreCreateColumnSchema[]) {
+		if (columns.some((c) => !DATA_STORE_COLUMN_REGEX.test(c.name))) {
+			throw new UnexpectedError('bad column name');
+		}
+
+		return await this.manager.transaction(async (em) => {
+			const dataStore = em.create(DataStoreEntity, { name, columns, projectId });
+			await em.insert(DataStoreEntity, dataStore);
+
+			const tableName = toTableName(dataStore.id);
+			const queryRunner = em.queryRunner!;
+			const dslColumns = [new DslColumn('id').int.autoGenerate2.primary, ...toDslColumns(columns)];
+
+			const createTable = new CreateTable(tableName, '', queryRunner);
+			createTable.withColumns.apply(createTable, dslColumns);
+			await createTable.execute(queryRunner);
+
+			return dataStore;
+		});
 	}
 
-	async getManyAndCount(options: DataStoreListOptions) {
+	async deleteUserTable(dataStoreId: string, entityManager?: EntityManager) {
+		const executor = entityManager ?? this.manager;
+		return await executor.transaction(async (em) => {
+			await em.delete(DataStoreEntity, { id: dataStoreId });
+			await em.query(`DROP TABLE ${toTableName(dataStoreId)}`);
+
+			return true;
+		});
+	}
+
+	async deleteDataStoreByProjectId(projectId: string) {
+		return await this.manager.transaction(async (em) => {
+			const existingTables = await em.findBy(DataStoreEntity, { projectId });
+
+			let changed = false;
+			for (const match of existingTables) {
+				const result = await this.deleteUserTable(match.id, em);
+				changed = changed || result;
+			}
+
+			return changed;
+		});
+	}
+
+	async deleteDataStoreAll() {
+		return await this.manager.transaction(async (em) => {
+			const existingTables = await em.findBy(DataStoreEntity, {});
+
+			let changed = false;
+			for (const match of existingTables) {
+				const result = await em.delete(DataStoreEntity, { id: match.id });
+				await em.query(`DROP TABLE ${toTableName(match.id)}`);
+				changed = changed || (result.affected ?? 0) > 0;
+			}
+
+			return changed;
+		});
+	}
+
+	async getManyAndCount(options: Partial<ListDataStoreQueryDto>) {
 		const query = this.getManyQuery(options);
 		const [data, count] = await query.getManyAndCount();
 		return { count, data };
 	}
 
-	async getMany(options: DataStoreListOptions) {
+	async getMany(options: Partial<ListDataStoreQueryDto>) {
 		const query = this.getManyQuery(options);
 		return await query.getMany();
 	}
 
-	private getManyQuery(options: DataStoreListOptions): SelectQueryBuilder<DataStoreEntity> {
+	private getManyQuery(
+		options: Partial<ListDataStoreQueryDto>,
+	): SelectQueryBuilder<DataStoreEntity> {
 		const query = this.createQueryBuilder('dataStore');
 
 		this.applySelections(query);
@@ -52,7 +121,7 @@ export class DataStoreRepository extends Repository<DataStoreEntity> {
 
 	private applyFilters(
 		query: SelectQueryBuilder<DataStoreEntity>,
-		filter: DataStoreListOptions['filter'],
+		filter: Partial<ListDataStoreQueryDto>['filter'],
 	): void {
 		for (const x of ['id', 'projectId'] as const) {
 			const content = [filter?.[x]].flat().filter((x) => x !== undefined);
@@ -105,10 +174,12 @@ export class DataStoreRepository extends Repository<DataStoreEntity> {
 
 	private applyPagination(
 		query: SelectQueryBuilder<DataStoreEntity>,
-		options: DataStoreListOptions,
+		options: Partial<ListDataStoreQueryDto>,
 	): void {
 		query.skip(options.skip ?? 0);
-		query.take(options.take ?? 0);
+		if (options?.take) {
+			query.skip(options.skip ?? 0).take(options.take);
+		}
 	}
 
 	private applyDefaultSelect(query: SelectQueryBuilder<DataStoreEntity>): void {

@@ -47,6 +47,18 @@ export class DataStoreProxyService {
 
 		const homeProject = await this.ownershipService.getWorkflowProjectCached(workflow.id);
 		const projectId = homeProject.id;
+
+		if (dataStoreId) {
+			const dataStore = await this.dataStoreService.getManyAndCount({
+				filter: { id: dataStoreId, projectId },
+			});
+			if (dataStore === null) {
+				throw new Error(
+					`Did not find data store with id '${dataStoreId}' in this workflow's project '${homeProject.name}'`,
+				);
+			}
+		}
+
 		const dataStoreService = this.dataStoreService;
 		const rowOperations =
 			dataStoreId === undefined
