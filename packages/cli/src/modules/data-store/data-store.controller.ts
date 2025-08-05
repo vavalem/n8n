@@ -21,7 +21,6 @@ import {
 	Query,
 	RestController,
 } from '@n8n/decorators';
-import type { DataStoreRows } from 'n8n-workflow';
 
 import { DataStoreService } from './data-store.service';
 
