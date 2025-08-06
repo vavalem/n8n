@@ -600,6 +600,17 @@ export class WorkflowExecute {
 		}
 	}
 
+	/**
+	 * Adds a node to the execution stack, handling data flow and waiting states.
+	 *
+	 * @param workflow - The workflow instance containing node definitions and connections
+	 * @param connectionData - Connection information specifying the destination
+	 *                         node (the node to be executed next) and input index
+	 * @param outputIndex - The output index from the parent node (0-based) that produced the data
+	 * @param parentNodeName - Name of the node that executed and produced the output data
+	 * @param nodeSuccessData - 2D array of execution data from parent node, indexed by [outputIndex][itemIndex]
+	 * @param runIndex - The execution run index for tracking multiple executions of the same node
+	 */
 	// eslint-disable-next-line complexity
 	addNodeToBeExecuted(
 		workflow: Workflow,
@@ -608,6 +619,7 @@ export class WorkflowExecute {
 		parentNodeName: string,
 		nodeSuccessData: INodeExecutionData[][],
 		runIndex: number,
+		metadata?: ITaskMetadata,
 	): void {
 		let stillDataMissing = false;
 		const enqueueFn = workflow.settings.executionOrder === 'v1' ? 'unshift' : 'push';
@@ -1006,6 +1018,7 @@ export class WorkflowExecute {
 						},
 					],
 				},
+				metadata,
 			});
 		}
 	}
@@ -1691,7 +1704,12 @@ export class WorkflowExecute {
 					// Get the index of the current run
 					runIndex = 0;
 					if (this.runExecutionData.resultData.runData.hasOwnProperty(executionNode.name)) {
-						runIndex = this.runExecutionData.resultData.runData[executionNode.name].length;
+						// If this execution is a sub node run, than some run data already
+						// exists. Especially for the inputOverride for the fromAI
+						// expression.
+						if (executionData.metadata?.isSubNodeRun) {
+							runIndex = this.runExecutionData.resultData.runData[executionNode.name].length - 1;
+						}
 					}
 					currentExecutionTry = `${executionNode.name}:${runIndex}`;
 					if (currentExecutionTry === lastExecutionTry) {
@@ -1780,7 +1798,7 @@ export class WorkflowExecute {
 								// if runNodeData is Foo
 								// 1. stop executing current node and put it as paused on the stack
 								//	- do any clean up of execution variables
-								// 2. put actions nodes on the stack
+								// 2. put actions nodes on the stack, rewiring the graph potentially?
 								// 3. continue executionLoop
 								// 4. when hitting the paused node again, restore the state and call the execute method on the paused node again
 								//
@@ -1792,40 +1810,63 @@ export class WorkflowExecute {
 
 								// if runNodeData is Foo
 								if ('actions' in runNodeData) {
-									// Add back agent node
+									// Add the agent node to be executed again
+									const parentNode = executionData.source!['main'][0]!.previousNode;
+									const connectionData: IConnection = {
+										// agents always have a main input
+										type: 'main',
+										node: executionData.node.name,
+										// agents always have only one input
+										index: 0,
+									};
+									this.addNodeToBeExecuted(
+										workflow,
+										connectionData,
+										// TODO: Output index of the parentNode
+										// get this from the source data somehow
+										0,
+										parentNode,
+										// TODO: fix types
+										executionData.data.main as INodeExecutionData[][],
+										// NOTE: parent's run index
+										runIndex,
+									);
 									for (const action of runNodeData.actions) {
+										// TODO: assert the node has only one input, maybe?
 										const node = workflow.getNode(action.nodeName);
-										const agentConnections = workflow.connectionsBySourceNode[action.nodeName][
-											action.type
-										].filter((connections) =>
-											connections!.find((connection) => connection.node === executionNode.name),
-										)[0];
-										const connections = workflow.connectionsByDestinationNode[executionNode.name][
-											action.type
-										].filter((connections) =>
-											connections!.find((connection) => connection.node === action.nodeName),
-										)[0];
+										const inputConnectionData: IConnection = {
+											// agents always have a main input
+											type: 'main',
+											node: action.nodeName,
+											// tools always have only one input
+											index: 0,
+										};
+										const parentNode = executionNode.name;
+										const parentOutputData: INodeExecutionData[][] = [[{ json: action.input }]];
+										const parentOutputIndex = 0;
 
-										if (node && connections && agentConnections) {
+										if (node) {
+											// add actions input to the run data
+											const nodeRunData = this.runExecutionData.resultData.runData[node.name] ?? [];
+											nodeRunData.push({
+												inputOverride: { ai_tool: parentOutputData },
+												source: [],
+												executionIndex: 0,
+												executionTime: 0,
+												startTime: 0,
+											});
+											this.runExecutionData.resultData.runData[node.name] = nodeRunData;
 											node.rewireOutputLogTo = action.type;
-											// Add the agent node to be executed again
-											this.addNodeToBeExecuted(
-												workflow,
-												agentConnections[0],
-												0,
-												action.nodeName, // TODO: replace with real parent node
-												executionData.data.main as INodeExecutionData[][],
-												runIndex,
-											);
 											// 2. put actions nodes on the stack
 											this.addNodeToBeExecuted(
 												workflow,
-												connections[0],
-												0,
-												executionNode.name,
-												// TODO: fix this,
-												[],
+												inputConnectionData,
+												parentOutputIndex,
+												parentNode,
+												parentOutputData,
 												runIndex,
+												// this is here to not increase the run index further up in this function
+												{ isSubNodeRun: true },
 											);
 										}
 									}
@@ -1841,6 +1882,7 @@ export class WorkflowExecute {
 								while (didContinueOnFail && tryIndex !== maxTries - 1) {
 									await sleep(waitBetweenTries);
 
+									// retries for failure happen here
 									runNodeData = await this.runNode(
 										workflow,
 										executionData,
@@ -1857,15 +1899,26 @@ export class WorkflowExecute {
 											const connections =
 												workflow.connectionsBySourceNode[action.nodeName][executionNode.name][0];
 
+											const inputConnectionData: IConnection = {
+												// agents always have a main input
+												type: 'main',
+												node: action.nodeName,
+												// tools always have only one input
+												index: 0,
+											};
+											const parentNode = executionNode.name;
+											const parentOutputData: INodeExecutionData[][] = [
+												[{ json: { value: action.input } }],
+											];
+											const parentOutputIndex = 0;
+
 											if (node && connections) {
 												this.addNodeToBeExecuted(
 													workflow,
-													connections[0],
-													0,
-													executionNode.name,
-													// TODO: fix this
-													// nodeSuccessData,
-													[[{ json: action.input as IDataObject }]],
+													inputConnectionData,
+													parentOutputIndex,
+													parentNode,
+													parentOutputData,
 													runIndex,
 												);
 											}
@@ -2066,7 +2119,14 @@ export class WorkflowExecute {
 						} as ITaskDataConnections;
 					}
 
-					this.runExecutionData.resultData.runData[executionNode.name].push(taskData);
+					if (executionData.metadata?.isSubNodeRun) {
+						console.log('isSubNodeRun');
+						const currentTaskData =
+							this.runExecutionData.resultData.runData[executionNode.name][runIndex];
+						Object.assign(currentTaskData, taskData);
+					} else {
+						this.runExecutionData.resultData.runData[executionNode.name].push(taskData);
+					}
 
 					if (this.runExecutionData.waitTill) {
 						await hooks.runHook('nodeExecuteAfter', [
@@ -2737,6 +2797,7 @@ export class WorkflowExecute {
 			// Node did not get executed
 			nodeSuccessData = null;
 		} else {
+			// TODO: Move this  back into main function?
 			this.runExecutionData.resultData.lastNodeExecuted = executionData.node.name;
 		}
 

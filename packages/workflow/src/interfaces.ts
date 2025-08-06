@@ -1715,7 +1715,9 @@ export interface INodeType {
 export type Foo = {
 	actions: Array<{
 		nodeName: string;
-		input: string | Record<string, unknown>;
+		input: IDataObject;
+		// input: string | Record<string, unknown>;
+		// input: INodeExecutionData[][] | null | undefined;
 		type: NodeConnectionType;
 		id: string;
 	}>;
@@ -2305,6 +2307,8 @@ export interface ITaskMetadata {
 	parentExecution?: RelatedExecution;
 	subExecution?: RelatedExecution;
 	subExecutionsCount?: number;
+	// TODO: get rid of this and instead add the runIndex to the stack somehow
+	isSubNodeRun?: boolean;
 }
 
 /** The data that gets returned when a node execution starts */
