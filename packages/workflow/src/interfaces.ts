@@ -942,11 +942,11 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 		getNodeOutputs(): INodeOutputConfiguration[];
 		getSubnodes(connectionType: NodeConnectionType): string[];
 		getRunIndex(): number;
-		getAiToolConnectionData(runIndex: number): Array<{
-			node: INode;
-			inputOverride?: ITaskDataConnections;
-			output?: ITaskDataConnections;
-			runData?: ITaskData[];
+		getAiToolConnectionData(): Array<{
+			nodeName: string;
+			input: IDataObject;
+			output?: ITaskData;
+			oldOutput?: ITaskDataConnections;
 		}>;
 		putExecutionToWait(waitTill: Date): Promise<void>;
 		sendMessageToUI(message: any): void;
@@ -1721,7 +1721,7 @@ export interface INodeType {
  * This class serves as the base for all nodes using the new context API
  * having this as a class enables us to identify these instances at runtime
  */
-export type Foo = {
+export type Request = {
 	actions: Array<{
 		nodeName: string;
 		input: IDataObject;
@@ -1731,9 +1731,13 @@ export type Foo = {
 		id: string;
 	}>;
 };
+export type SubNodeExecutionResult = {
+	action: Request['actions'][number];
+	data: ITaskData;
+};
 export abstract class Node {
 	abstract description: INodeTypeDescription;
-	execute?(context: IExecuteFunctions): Promise<INodeExecutionData[][] | Foo>;
+	execute?(context: IExecuteFunctions): Promise<INodeExecutionData[][] | Request>;
 	webhook?(context: IWebhookFunctions): Promise<IWebhookResponseData>;
 	poll?(context: IPollFunctions): Promise<INodeExecutionData[][] | null>;
 }
@@ -2316,6 +2320,12 @@ export interface ITaskMetadata {
 	parentExecution?: RelatedExecution;
 	subExecution?: RelatedExecution;
 	subExecutionsCount?: number;
+	subNodeExecutionData?: Array<{
+		nodeName: string;
+		runIndex: number;
+		action: Request['actions'][number];
+		response?: unknown;
+	}>;
 }
 
 /** The data that gets returned when a node execution starts */

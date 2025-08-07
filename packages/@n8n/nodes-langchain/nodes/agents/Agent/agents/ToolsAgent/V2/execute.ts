@@ -21,7 +21,9 @@ import {
 	sleep,
 } from 'n8n-workflow';
 import type {
-	Foo,
+	Request,
+	GenericValue,
+	IDataObject,
 	IExecuteFunctions,
 	INodeExecutionData,
 	ISupplyDataFunctions,
@@ -183,18 +185,29 @@ async function processEventStream(
  */
 export async function toolsAgentExecute(
 	this: IExecuteFunctions | ISupplyDataFunctions,
-): Promise<INodeExecutionData[][] | Foo> {
-	const steps = [];
+): Promise<INodeExecutionData[][] | Request> {
+	const steps: {
+		action: {
+			tool: string;
+			toolInput: IDataObject;
+			log: string | number | true | object;
+			messageLog: AIMessage[];
+			toolCallId: IDataObject | GenericValue | GenericValue[] | IDataObject[];
+			type: string | number | true | object;
+		};
+		observation: string;
+	}[] = [];
 	this.logger.debug('Executing Tools Agent V2');
 
 	// Debug output for AI tool connections
 	if ('getAiToolConnectionData' in this) {
-		const currentRunIndex = this.getRunIndex();
-		const toolData = this.getAiToolConnectionData(currentRunIndex);
+		// const currentRunIndex = this.getRunIndex();
+		const toolData = this.getAiToolConnectionData();
+		console.log('toolData', toolData);
 
 		// Reconstruct steps
 		for (const tool of toolData) {
-			const toolInput = tool.inputOverride?.ai_tool?.[0]?.[0]?.json;
+			const toolInput = tool.input;
 			if (!toolInput || !tool.output) {
 				continue;
 			}
@@ -203,11 +216,11 @@ export async function toolsAgentExecute(
 			// This represents the AI's decision to call the tool
 			const syntheticAIMessage = new AIMessage({
 				content:
-					toolInput.log || `Calling ${tool.node.name} with input: ${JSON.stringify(toolInput)}`,
+					toolInput.log || `Calling ${tool.nodeName} with input: ${JSON.stringify(toolInput)}`,
 				tool_calls: [
 					{
 						id: toolInput.toolCallId || 'reconstructed_call',
-						name: nodeNameToToolName(tool.node.name),
+						name: nodeNameToToolName(tool.nodeName),
 						args: toolInput,
 						type: 'tool_call',
 					},
@@ -216,7 +229,7 @@ export async function toolsAgentExecute(
 
 			steps.push({
 				action: {
-					tool: nodeNameToToolName(tool.node.name),
+					tool: nodeNameToToolName(tool.nodeName),
 					toolInput: toolInput,
 					log: toolInput.log || syntheticAIMessage.content,
 					messageLog: [syntheticAIMessage],
@@ -228,7 +241,7 @@ export async function toolsAgentExecute(
 		}
 	}
 
-	const returnData: INodeExecutionData[] | Foo[] = [];
+	const returnData: INodeExecutionData[] | Request[] = [];
 	const items = this.getInputData();
 	const batchSize = this.getNodeParameter('options.batching.batchSize', 0, 1) as number;
 	const delayBetweenBatches = this.getNodeParameter(
@@ -341,7 +354,7 @@ export async function toolsAgentExecute(
 				const connectedSubnodes = this.getConnectedNodes(NodeConnectionTypes.AiTool);
 
 				// If response contains tool calls, we need to return this in the right format
-				const actions: Foo = response.map((action) => ({
+				const actions: Request = response.map((action) => ({
 					nodeName: connectedSubnodes.find((node) => nodeNameToToolName(node.name) === action.tool)
 						?.name,
 					input: action.toolInput,
@@ -405,7 +418,7 @@ export async function toolsAgentExecute(
 		}
 	}
 	if ('actions' in returnData[0]) {
-		return returnData[0] as Foo;
+		return returnData[0] as Request;
 	}
 
 	return [returnData] as INodeExecutionData[][];
