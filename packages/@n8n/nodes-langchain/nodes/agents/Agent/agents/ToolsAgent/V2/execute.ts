@@ -2,6 +2,7 @@ import type { StreamEvent } from '@langchain/core/dist/tracers/event_stream';
 import type { IterableReadableStream } from '@langchain/core/dist/utils/stream';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { AIMessageChunk, MessageContentText } from '@langchain/core/messages';
+import { AIMessage } from '@langchain/core/messages';
 import type { ChatPromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
 import {
@@ -186,6 +187,47 @@ export async function toolsAgentExecute(
 	const steps = [];
 	this.logger.debug('Executing Tools Agent V2');
 
+	// Debug output for AI tool connections
+	if ('getAiToolConnectionData' in this) {
+		const currentRunIndex = this.getRunIndex();
+		const toolData = this.getAiToolConnectionData(currentRunIndex);
+
+		// Reconstruct steps
+		for (const tool of toolData) {
+			const toolInput = tool.inputOverride?.ai_tool?.[0]?.[0]?.json;
+			if (!toolInput || !tool.output) {
+				continue;
+			}
+
+			// Create a synthetic AI message for the messageLog
+			// This represents the AI's decision to call the tool
+			const syntheticAIMessage = new AIMessage({
+				content:
+					toolInput.log || `Calling ${tool.node.name} with input: ${JSON.stringify(toolInput)}`,
+				tool_calls: [
+					{
+						id: toolInput.toolCallId || 'reconstructed_call',
+						name: nodeNameToToolName(tool.node.name),
+						args: toolInput,
+						type: 'tool_call',
+					},
+				],
+			});
+
+			steps.push({
+				action: {
+					tool: nodeNameToToolName(tool.node.name),
+					toolInput: toolInput,
+					log: toolInput.log || syntheticAIMessage.content,
+					messageLog: [syntheticAIMessage],
+					toolCallId: toolInput.toolCallId,
+					type: toolInput.type || 'tool_call',
+				},
+				observation: JSON.stringify(tool.output),
+			});
+		}
+	}
+
 	const returnData: INodeExecutionData[] | Foo[] = [];
 	const items = this.getInputData();
 	const batchSize = this.getNodeParameter('options.batching.batchSize', 0, 1) as number;
@@ -293,7 +335,7 @@ export async function toolsAgentExecute(
 				const response = await executor.invoke(invokeParams);
 
 				if ('returnValues' in response) {
-					return response;
+					return response.returnValues;
 				}
 
 				const connectedSubnodes = this.getConnectedNodes(NodeConnectionTypes.AiTool);

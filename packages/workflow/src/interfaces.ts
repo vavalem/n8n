@@ -939,6 +939,13 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 		getNodeInputs(): INodeInputConfiguration[];
 		getNodeOutputs(): INodeOutputConfiguration[];
 		getSubnodes(connectionType: NodeConnectionType): string[];
+		getRunIndex(): number;
+		getAiToolConnectionData(runIndex: number): Array<{
+			node: INode;
+			inputOverride?: ITaskDataConnections;
+			output?: ITaskDataConnections;
+			runData?: ITaskData[];
+		}>;
 		putExecutionToWait(waitTill: Date): Promise<void>;
 		sendMessageToUI(message: any): void;
 		sendResponse(response: IExecuteResponsePromiseData): void;

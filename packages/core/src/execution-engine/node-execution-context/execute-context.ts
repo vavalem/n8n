@@ -11,6 +11,7 @@ import type {
 	INode,
 	INodeExecutionData,
 	IRunExecutionData,
+	ITaskData,
 	ITaskDataConnections,
 	IWorkflowExecuteAdditionalData,
 	NodeConnectionType,
@@ -228,6 +229,45 @@ export class ExecuteContext extends BaseExecuteContext implements IExecuteFuncti
 
 	getSubnodes(connectionType: NodeConnectionType): string[] {
 		return this.workflow.getParentNodes(this.node.name, connectionType);
+	}
+
+	getRunIndex(): number {
+		return this.runIndex;
+	}
+
+	getAiToolConnectionData(runIndex: number) {
+		const connectedNodes = this.getConnectedNodes('ai_tool');
+		const result: Array<{
+			node: INode;
+			inputOverride?: ITaskDataConnections;
+			output?: ITaskDataConnections;
+			runData?: ITaskData[];
+		}> = [];
+
+		for (const node of connectedNodes) {
+			const runData = this.runExecutionData.resultData.runData[node.name] || [];
+
+			// Only include tools that have been executed
+			if (runData.length === 0) {
+				continue;
+			}
+
+			// Use runIndex - 1 to get the correct tool execution data
+			// Tools are executed before the agent processes the result
+			const toolRunIndex = Math.max(0, runIndex - 1);
+			const targetRun = runData[Math.min(toolRunIndex, runData.length - 1)];
+
+			const nodeResult = {
+				node,
+				inputOverride: targetRun?.inputOverride,
+				output: targetRun?.data,
+				runData,
+			};
+
+			result.push(nodeResult);
+		}
+
+		return result;
 	}
 
 	logNodeOutput(...args: unknown[]): void {

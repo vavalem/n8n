@@ -1842,7 +1842,16 @@ export class WorkflowExecute {
 											index: 0,
 										};
 										const parentNode = executionNode.name;
-										const parentOutputData: INodeExecutionData[][] = [[{ json: action.input }]];
+										const parentOutputData: INodeExecutionData[][] = [
+											[
+												{
+													json: {
+														...action.input,
+														toolCallId: action.id,
+													},
+												},
+											],
+										];
 										const parentOutputIndex = 0;
 
 										if (node) {
