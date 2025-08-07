@@ -1790,6 +1790,30 @@ export class WorkflowExecute {
 									this.abortController.signal,
 								);
 
+								let didContinueOnFail =
+									!('actions' in runNodeData) &&
+									runNodeData.data?.[0]?.[0]?.json?.error !== undefined;
+
+								while (didContinueOnFail && tryIndex !== maxTries - 1) {
+									await sleep(waitBetweenTries);
+
+									// retries for failure happen here
+									runNodeData = await this.runNode(
+										workflow,
+										executionData,
+										this.runExecutionData,
+										runIndex,
+										this.additionalData,
+										this.mode,
+										this.abortController.signal,
+									);
+
+									didContinueOnFail =
+										!('actions' in runNodeData) &&
+										runNodeData.data?.[0]?.[0]?.json?.error !== undefined;
+									tryIndex++;
+								}
+
 								// Support waiting in tools
 								//
 								// if runNodeData is Foo
@@ -1862,7 +1886,7 @@ export class WorkflowExecute {
 												startTime: 0,
 											});
 											this.runExecutionData.resultData.runData[node.name] = nodeRunData;
-											const newRunIndex = nodeRunData.length - 1;
+											const nodeRunIndex = nodeRunData.length - 1;
 											node.rewireOutputLogTo = action.type;
 											// 2. put actions nodes on the stack
 											this.addNodeToBeExecuted(
@@ -1873,7 +1897,7 @@ export class WorkflowExecute {
 												parentOutputData,
 												runIndex,
 												// this is here to not increase the run index further up in this function
-												newRunIndex,
+												nodeRunIndex,
 											);
 										}
 									}
@@ -1883,61 +1907,6 @@ export class WorkflowExecute {
 								}
 
 								nodeSuccessData = runNodeData.data;
-
-								let didContinueOnFail = nodeSuccessData?.[0]?.[0]?.json?.error !== undefined;
-
-								while (didContinueOnFail && tryIndex !== maxTries - 1) {
-									await sleep(waitBetweenTries);
-
-									// retries for failure happen here
-									runNodeData = await this.runNode(
-										workflow,
-										executionData,
-										this.runExecutionData,
-										runIndex,
-										this.additionalData,
-										this.mode,
-										this.abortController.signal,
-									);
-
-									if ('actions' in runNodeData) {
-										for (const action of runNodeData.actions) {
-											const node = workflow.getNode(action.nodeName);
-											const connections =
-												workflow.connectionsBySourceNode[action.nodeName][executionNode.name][0];
-
-											const inputConnectionData: IConnection = {
-												// agents always have a main input
-												type: 'main',
-												node: action.nodeName,
-												// tools always have only one input
-												index: 0,
-											};
-											const parentNode = executionNode.name;
-											const parentOutputData: INodeExecutionData[][] = [
-												[{ json: { value: action.input } }],
-											];
-											const parentOutputIndex = 0;
-
-											if (node && connections) {
-												this.addNodeToBeExecuted(
-													workflow,
-													inputConnectionData,
-													parentOutputIndex,
-													parentNode,
-													parentOutputData,
-													runIndex,
-												);
-											}
-										}
-
-										continue executionLoop;
-									}
-
-									nodeSuccessData = runNodeData.data;
-									didContinueOnFail = nodeSuccessData?.[0]?.[0]?.json?.error !== undefined;
-									tryIndex++;
-								}
 
 								if (runNodeData.hints?.length) {
 									taskStartedData.hints!.push(...runNodeData.hints);
