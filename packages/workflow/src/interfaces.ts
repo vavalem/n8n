@@ -421,6 +421,8 @@ export interface IExecuteData {
 	metadata?: ITaskMetadata;
 	node: INode;
 	source: ITaskDataConnectionsSource | null;
+	// TODO: try to make this required
+	runIndex?: number;
 }
 
 export type IContextObject = {
@@ -2314,8 +2316,6 @@ export interface ITaskMetadata {
 	parentExecution?: RelatedExecution;
 	subExecution?: RelatedExecution;
 	subExecutionsCount?: number;
-	// TODO: get rid of this and instead add the runIndex to the stack somehow
-	isSubNodeRun?: boolean;
 }
 
 /** The data that gets returned when a node execution starts */

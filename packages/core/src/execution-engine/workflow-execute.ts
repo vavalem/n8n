@@ -619,7 +619,7 @@ export class WorkflowExecute {
 		parentNodeName: string,
 		nodeSuccessData: INodeExecutionData[][],
 		runIndex: number,
-		metadata?: ITaskMetadata,
+		newRunIndex?: number,
 	): void {
 		let stillDataMissing = false;
 		const enqueueFn = workflow.settings.executionOrder === 'v1' ? 'unshift' : 'push';
@@ -1018,7 +1018,7 @@ export class WorkflowExecute {
 						},
 					],
 				},
-				metadata,
+				runIndex: newRunIndex,
 			});
 		}
 	}
@@ -1703,13 +1703,10 @@ export class WorkflowExecute {
 
 					// Get the index of the current run
 					runIndex = 0;
-					if (this.runExecutionData.resultData.runData.hasOwnProperty(executionNode.name)) {
-						// If this execution is a sub node run, than some run data already
-						// exists. Especially for the inputOverride for the fromAI
-						// expression.
-						if (executionData.metadata?.isSubNodeRun) {
-							runIndex = this.runExecutionData.resultData.runData[executionNode.name].length - 1;
-						}
+					if (executionData.runIndex !== undefined) {
+						runIndex = executionData.runIndex;
+					} else if (this.runExecutionData.resultData.runData.hasOwnProperty(executionNode.name)) {
+						runIndex = this.runExecutionData.resultData.runData[executionNode.name].length;
 					}
 					currentExecutionTry = `${executionNode.name}:${runIndex}`;
 					if (currentExecutionTry === lastExecutionTry) {
@@ -1865,6 +1862,7 @@ export class WorkflowExecute {
 												startTime: 0,
 											});
 											this.runExecutionData.resultData.runData[node.name] = nodeRunData;
+											const newRunIndex = nodeRunData.length - 1;
 											node.rewireOutputLogTo = action.type;
 											// 2. put actions nodes on the stack
 											this.addNodeToBeExecuted(
@@ -1875,7 +1873,7 @@ export class WorkflowExecute {
 												parentOutputData,
 												runIndex,
 												// this is here to not increase the run index further up in this function
-												{ isSubNodeRun: true },
+												newRunIndex,
 											);
 										}
 									}
@@ -2128,8 +2126,9 @@ export class WorkflowExecute {
 						} as ITaskDataConnections;
 					}
 
-					if (executionData.metadata?.isSubNodeRun) {
-						console.log('isSubNodeRun');
+					const runDataAlreadyExists =
+						!!this.runExecutionData.resultData.runData[executionNode.name][runIndex];
+					if (runDataAlreadyExists) {
 						const currentTaskData =
 							this.runExecutionData.resultData.runData[executionNode.name][runIndex];
 						Object.assign(currentTaskData, taskData);
