@@ -1247,8 +1247,8 @@ export class WorkflowExecute {
 		} else if (nodeType.execute) {
 			data =
 				nodeType instanceof Node
-					? await nodeType.execute(context)
-					: await nodeType.execute.call(context);
+					? await nodeType.execute(context, subNodeExecutionResults)
+					: await nodeType.execute.call(context, subNodeExecutionResults);
 		} else {
 			throw new Error();
 		}

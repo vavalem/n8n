@@ -942,12 +942,6 @@ export type IExecuteFunctions = ExecuteFunctions.GetNodeParameterFn &
 		getNodeOutputs(): INodeOutputConfiguration[];
 		getSubnodes(connectionType: NodeConnectionType): string[];
 		getRunIndex(): number;
-		getAiToolConnectionData(): Array<{
-			nodeName: string;
-			input: IDataObject;
-			output?: ITaskData;
-			oldOutput?: ITaskDataConnections;
-		}>;
 		putExecutionToWait(waitTill: Date): Promise<void>;
 		sendMessageToUI(message: any): void;
 		sendResponse(response: IExecuteResponsePromiseData): void;
@@ -1661,7 +1655,7 @@ type NodeOutput = INodeExecutionData[][] | NodeExecutionWithMetadata[][] | null;
 export interface INodeType {
 	description: INodeTypeDescription;
 	supplyData?(this: ISupplyDataFunctions, itemIndex: number): Promise<SupplyData>;
-	execute?(this: IExecuteFunctions): Promise<NodeOutput>;
+	execute?(this: IExecuteFunctions, responses?: SubNodeExecutionResult[]): Promise<NodeOutput>;
 	/**
 	 * A function called when a node receives a chat message. Allows it to react
 	 * to the message before it gets executed.
@@ -1717,27 +1711,35 @@ export interface INodeType {
 	};
 }
 
+type ExecutionNodeAction<T extends unknown> = {
+	actionType: 'ExecutionNodeAction';
+	nodeName: string;
+	input: IDataObject;
+	// input: string | Record<string, unknown>;
+	// input: INodeExecutionData[][] | null | undefined;
+	type: NodeConnectionType;
+	id: string;
+	metadata: T;
+};
+type Action<T = unknown> = ExecutionNodeAction<T>;
+export type Request<T = unknown> = {
+	actions: Array<Action<T>>;
+};
+export type SubNodeExecutionResult<T = unknown> = {
+	action: ExecutionNodeAction<T>;
+	data: ITaskData;
+};
+
 /**
  * This class serves as the base for all nodes using the new context API
  * having this as a class enables us to identify these instances at runtime
  */
-export type Request = {
-	actions: Array<{
-		nodeName: string;
-		input: IDataObject;
-		// input: string | Record<string, unknown>;
-		// input: INodeExecutionData[][] | null | undefined;
-		type: NodeConnectionType;
-		id: string;
-	}>;
-};
-export type SubNodeExecutionResult = {
-	action: Request['actions'][number];
-	data: ITaskData;
-};
 export abstract class Node {
 	abstract description: INodeTypeDescription;
-	execute?(context: IExecuteFunctions): Promise<INodeExecutionData[][] | Request>;
+	execute?(
+		context: IExecuteFunctions,
+		response?: SubNodeExecutionResult[],
+	): Promise<INodeExecutionData[][] | Request<unknown>>;
 	webhook?(context: IWebhookFunctions): Promise<IWebhookResponseData>;
 	poll?(context: IPollFunctions): Promise<INodeExecutionData[][] | null>;
 }

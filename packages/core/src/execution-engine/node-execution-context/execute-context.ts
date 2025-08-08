@@ -237,58 +237,6 @@ export class ExecuteContext extends BaseExecuteContext implements IExecuteFuncti
 		return this.runIndex;
 	}
 
-	getAiToolConnectionData() {
-		const results: Array<{
-			nodeName: string;
-			input: IDataObject;
-			output: ITaskData;
-
-			runData?: ITaskData[];
-			inputOverride?: ITaskDataConnections;
-		}> = [];
-
-		if (this.subNodeExecutionResults) {
-			console.log('found subNodeExecutionResults');
-			for (const result of this.subNodeExecutionResults) {
-				results.push({
-					nodeName: result.action.nodeName,
-					input: {
-						...result.action.input,
-						id: result.action.id,
-					},
-					output: result.data,
-				});
-			}
-		}
-
-		// const connectedNodes = this.getConnectedNodes('ai_tool');
-		//
-		// for (const node of connectedNodes) {
-		// 	const runData = this.runExecutionData.resultData.runData[node.name] || [];
-		//
-		// 	// Only include tools that have been executed
-		// 	if (runData.length === 0) {
-		// 		continue;
-		// 	}
-		//
-		// 	// Use runIndex - 1 to get the correct tool execution data
-		// 	// Tools are executed before the agent processes the result
-		// 	const toolRunIndex = Math.max(0, runIndex - 1);
-		// 	const targetRun = runData[Math.min(toolRunIndex, runData.length - 1)];
-		//
-		// 	const nodeResult = {
-		// 		node,
-		// 		inputOverride: targetRun?.inputOverride,
-		// 		output: targetRun?.data,
-		// 		runData,
-		// 	};
-		//
-		// 	results.push(nodeResult);
-		// }
-
-		return results;
-	}
-
 	logNodeOutput(...args: unknown[]): void {
 		if (this.mode === 'manual') {
 			const parsedLogArgs = args.map((arg) =>

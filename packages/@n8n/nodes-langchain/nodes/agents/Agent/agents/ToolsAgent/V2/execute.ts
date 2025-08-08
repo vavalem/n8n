@@ -27,6 +27,7 @@ import type {
 	IExecuteFunctions,
 	INodeExecutionData,
 	ISupplyDataFunctions,
+	SubNodeExecutionResult,
 } from 'n8n-workflow';
 import assert from 'node:assert';
 
@@ -169,6 +170,10 @@ async function processEventStream(
 	return agentResult;
 }
 
+export type RequestResponseMetadata = {
+	toolCallId: number;
+};
+
 /* -----------------------------------------------------------
    Main Executor Function
 ----------------------------------------------------------- */
@@ -185,7 +190,8 @@ async function processEventStream(
  */
 export async function toolsAgentExecute(
 	this: IExecuteFunctions | ISupplyDataFunctions,
-): Promise<INodeExecutionData[][] | Request> {
+	responses?: SubNodeExecutionResult<RequestResponseMetadata>[],
+): Promise<INodeExecutionData[][] | Request<RequestResponseMetadata>> {
 	const steps: Array<{
 		action: {
 			tool: string;
@@ -200,26 +206,25 @@ export async function toolsAgentExecute(
 	this.logger.debug('Executing Tools Agent V2');
 
 	// Debug output for AI tool connections
-	if ('getAiToolConnectionData' in this) {
-		// const currentRunIndex = this.getRunIndex();
-		const toolData = this.getAiToolConnectionData();
-		console.log('toolData', toolData);
-
+	if (responses) {
 		// Reconstruct steps
-		for (const tool of toolData) {
-			const toolInput = tool.input;
-			if (!toolInput || !tool.output) {
+		for (const tool of responses) {
+			const toolInput: IDataObject = {
+				...tool.action.input,
+				id: tool.action.id,
+			};
+			if (!toolInput || !tool.data) {
 				continue;
 			}
 
 			// Create a synthetic AI message for the messageLog
 			// This represents the AI's decision to call the tool
 			const syntheticAIMessage = new AIMessage({
-				content: `Calling ${tool.nodeName} with input: ${JSON.stringify(toolInput)}`,
+				content: `Calling ${tool.action.nodeName} with input: ${JSON.stringify(toolInput)}`,
 				tool_calls: [
 					{
 						id: (toolInput?.id as string) ?? 'reconstructed_call',
-						name: nodeNameToToolName(tool.nodeName),
+						name: nodeNameToToolName(tool.action.nodeName),
 						args: toolInput,
 						type: 'tool_call',
 					},
@@ -228,14 +233,14 @@ export async function toolsAgentExecute(
 
 			steps.push({
 				action: {
-					tool: nodeNameToToolName(tool.nodeName),
+					tool: nodeNameToToolName(tool.action.nodeName),
 					toolInput: (toolInput.input as IDataObject) || {},
 					log: toolInput.log || syntheticAIMessage.content,
 					messageLog: [syntheticAIMessage],
 					toolCallId: toolInput?.id,
 					type: toolInput.type || 'tool_call',
 				},
-				observation: JSON.stringify(tool.output),
+				observation: JSON.stringify(tool.data),
 			});
 		}
 	}
