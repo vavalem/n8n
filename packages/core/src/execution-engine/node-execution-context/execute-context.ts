@@ -252,7 +252,10 @@ export class ExecuteContext extends BaseExecuteContext implements IExecuteFuncti
 			for (const result of this.subNodeExecutionResults) {
 				results.push({
 					nodeName: result.action.nodeName,
-					input: result.action.input,
+					input: {
+						...result.action.input,
+						id: result.action.id,
+					},
 					output: result.data,
 				});
 			}

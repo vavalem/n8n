@@ -186,17 +186,17 @@ async function processEventStream(
 export async function toolsAgentExecute(
 	this: IExecuteFunctions | ISupplyDataFunctions,
 ): Promise<INodeExecutionData[][] | Request> {
-	const steps: {
+	const steps: Array<{
 		action: {
 			tool: string;
-			toolInput: IDataObject;
+			toolInput: Record<string, unknown>;
 			log: string | number | true | object;
 			messageLog: AIMessage[];
 			toolCallId: IDataObject | GenericValue | GenericValue[] | IDataObject[];
 			type: string | number | true | object;
 		};
 		observation: string;
-	}[] = [];
+	}> = [];
 	this.logger.debug('Executing Tools Agent V2');
 
 	// Debug output for AI tool connections
@@ -215,11 +215,10 @@ export async function toolsAgentExecute(
 			// Create a synthetic AI message for the messageLog
 			// This represents the AI's decision to call the tool
 			const syntheticAIMessage = new AIMessage({
-				content:
-					toolInput.log || `Calling ${tool.nodeName} with input: ${JSON.stringify(toolInput)}`,
+				content: `Calling ${tool.nodeName} with input: ${JSON.stringify(toolInput)}`,
 				tool_calls: [
 					{
-						id: toolInput.toolCallId || 'reconstructed_call',
+						id: (toolInput?.id as string) ?? 'reconstructed_call',
 						name: nodeNameToToolName(tool.nodeName),
 						args: toolInput,
 						type: 'tool_call',
@@ -230,10 +229,10 @@ export async function toolsAgentExecute(
 			steps.push({
 				action: {
 					tool: nodeNameToToolName(tool.nodeName),
-					toolInput: toolInput,
+					toolInput: (toolInput.input as IDataObject) || {},
 					log: toolInput.log || syntheticAIMessage.content,
 					messageLog: [syntheticAIMessage],
-					toolCallId: toolInput.toolCallId,
+					toolCallId: toolInput?.id,
 					type: toolInput.type || 'tool_call',
 				},
 				observation: JSON.stringify(tool.output),
