@@ -45,8 +45,10 @@ export class ToolCalculator implements INodeType {
 	};
 
 	async supplyData(this: ISupplyDataFunctions): Promise<SupplyData> {
+		const calculator = new Calculator();
+		calculator.name = this.getNode().name;
 		return {
-			response: logWrapper(new Calculator(), this),
+			response: logWrapper(calculator, this),
 		};
 	}
 }

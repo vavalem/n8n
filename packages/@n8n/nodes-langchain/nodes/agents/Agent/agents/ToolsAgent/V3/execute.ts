@@ -358,8 +358,9 @@ export async function toolsAgentExecute(
 
 				// If response contains tool calls, we need to return this in the right format
 				const actions: Request = response.map((action) => ({
-					nodeName: connectedSubnodes.find((node) => nodeNameToToolName(node.name) === action.tool)
-						?.name,
+					nodeName: connectedSubnodes.find(
+						(node) => nodeNameToToolName(node.name).toLowerCase() === action.tool.toLowerCase(),
+					)?.name,
 					input: action.toolInput,
 					type: NodeConnectionTypes.AiTool,
 					id: action.toolCallId,

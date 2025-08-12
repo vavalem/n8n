@@ -46,6 +46,7 @@ export class ToolWikipedia implements INodeType {
 	async supplyData(this: ISupplyDataFunctions): Promise<SupplyData> {
 		const WikiTool = new WikipediaQueryRun();
 
+		WikiTool.name = this.getNode().name;
 		WikiTool.description =
 			'A tool for interacting with and fetching data from the Wikipedia API. The input should always be a string query.';
 

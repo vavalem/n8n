@@ -67,7 +67,7 @@ import * as NodeExecuteFunctions from '@/node-execute-functions';
 import { isJsonCompatible } from '@/utils/is-json-compatible';
 
 import type { ExecutionLifecycleHooks } from './execution-lifecycle-hooks';
-import { ExecuteContext, PollContext } from './node-execution-context';
+import { ExecuteContext, PollContext, SupplyDataContext } from './node-execution-context';
 import {
 	DirectedGraph,
 	findStartNodes,
@@ -82,6 +82,7 @@ import {
 } from './partial-execution-utils';
 import { RoutingNode } from './routing-node';
 import { TriggersAndPollers } from './triggers-and-pollers';
+import { omit } from 'lodash';
 
 export class WorkflowExecute {
 	private status: ExecutionStatus = 'new';
@@ -1281,6 +1282,81 @@ export class WorkflowExecute {
 	}
 
 	/**
+	 * Executes a node with supplyData method, calling invoke if present on the response
+	 */
+	private async executeSupplyDataNode(
+		workflow: Workflow,
+		node: INode,
+		nodeType: INodeType,
+		additionalData: IWorkflowExecuteAdditionalData,
+		mode: WorkflowExecuteMode,
+		runExecutionData: IRunExecutionData,
+		runIndex: number,
+		connectionInputData: INodeExecutionData[],
+		inputData: ITaskDataConnections,
+		executionData: IExecuteData,
+		abortSignal?: AbortSignal,
+		_subNodeExecutionResults?: SubNodeExecutionResult[],
+	): Promise<IRunNodeResponse | Request> {
+		const closeFunctions: CloseFunction[] = [];
+		const context = new SupplyDataContext(
+			workflow,
+			node,
+			additionalData,
+			mode,
+			runExecutionData,
+			runIndex,
+			connectionInputData,
+			inputData,
+			NodeConnectionTypes.AiTool,
+			executionData,
+			closeFunctions,
+			abortSignal,
+		);
+
+		let data: INodeExecutionData[][] | Request | null;
+
+		// Call the supplyData method with itemIndex (typically 0 for single item processing)
+		const itemIndex = 0;
+		const suppliedData = await nodeType.supplyData!.call(context, itemIndex);
+
+		const input = omit(connectionInputData[itemIndex]?.json, 'toolCallId');
+		// Check if the response has an invoke method and call it
+		if (suppliedData?.response && typeof (suppliedData.response as any).invoke === 'function') {
+			data = await (suppliedData.response as any).invoke(input);
+		} else {
+			// Return supplied data response directly if no invoke method
+			data = suppliedData?.response as INodeExecutionData[][] | null;
+		}
+
+		if (data && !Array.isArray(data)) {
+			data = [[{ json: data, pairedItem: { item: itemIndex } }]];
+		}
+
+		this.validateExecutionData(data, workflow, node);
+
+		const closeFunctionsResults = await Promise.allSettled(
+			closeFunctions.map(async (fn) => await fn()),
+		);
+
+		const closingErrors = closeFunctionsResults
+			.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
+			.map((result) => result.reason);
+
+		if (closingErrors.length > 0) {
+			if (closingErrors[0] instanceof Error) throw closingErrors[0];
+			throw new ApplicationError("Error on execution node's close function(s)", {
+				extra: { nodeName: node.name },
+				tags: { nodeType: node.type },
+				cause: closingErrors,
+			});
+		}
+
+		return { data };
+	}
+
+	/**
 	 * Validates execution data for JSON compatibility and reports issues to Sentry
 	 */
 	private validateExecutionData(
@@ -1453,6 +1529,7 @@ export class WorkflowExecute {
 		const nodeType = workflow.nodeTypes.getByNameAndVersion(node.type, node.typeVersion);
 		const isDeclarativeNode = nodeType.description.requestDefaults !== undefined;
 		const customOperation = this.getCustomOperation(node, nodeType);
+		const hasSupplyData = typeof nodeType.supplyData === 'function';
 
 		const connectionInputData = this.prepareConnectionInputData(
 			workflow,
@@ -1469,7 +1546,22 @@ export class WorkflowExecute {
 
 		inputData = this.handleExecuteOnce(node, inputData);
 
-		if (nodeType.execute || customOperation) {
+		if (hasSupplyData) {
+			return await this.executeSupplyDataNode(
+				workflow,
+				node,
+				nodeType,
+				additionalData,
+				mode,
+				runExecutionData,
+				runIndex,
+				connectionInputData,
+				inputData,
+				executionData,
+				abortSignal,
+				subNodeExecutionResults,
+			);
+		} else if (nodeType.execute || customOperation) {
 			return await this.executeNode(
 				workflow,
 				node,
