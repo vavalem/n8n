@@ -11,16 +11,16 @@ import type {
 import { promptTypeOptions, textFromPreviousNode, textInput } from '@utils/descriptions';
 
 import { getInputs } from '../utils';
-import { getToolsAgentProperties } from '../agents/ToolsAgent/V2/description';
-import { RequestResponseMetadata, toolsAgentExecute } from '../agents/ToolsAgent/V2/execute';
+import { getToolsAgentProperties } from '../agents/ToolsAgent/V3/description';
+import { RequestResponseMetadata, toolsAgentExecute } from '../agents/ToolsAgent/V3/execute';
 
-export class AgentV2 implements INodeType {
+export class AgentV3 implements INodeType {
 	description: INodeTypeDescription;
 
 	constructor(baseDescription: INodeTypeBaseDescription) {
 		this.description = {
 			...baseDescription,
-			version: [2, 2.1, 2.2],
+			version: [3],
 			defaults: {
 				name: 'AI Agent',
 				color: '#404040',

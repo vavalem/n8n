@@ -2,6 +2,7 @@ import type { StreamEvent } from '@langchain/core/dist/tracers/event_stream';
 import type { IterableReadableStream } from '@langchain/core/dist/utils/stream';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { AIMessageChunk, MessageContentText } from '@langchain/core/messages';
+import { AIMessage } from '@langchain/core/messages';
 import type { ChatPromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence } from '@langchain/core/runnables';
 import {
@@ -12,8 +13,22 @@ import {
 import type { BaseChatMemory } from 'langchain/memory';
 import type { DynamicStructuredTool, Tool } from 'langchain/tools';
 import omit from 'lodash/omit';
-import { jsonParse, NodeOperationError, sleep } from 'n8n-workflow';
-import type { IExecuteFunctions, INodeExecutionData, ISupplyDataFunctions } from 'n8n-workflow';
+import {
+	jsonParse,
+	NodeConnectionTypes,
+	nodeNameToToolName,
+	NodeOperationError,
+	sleep,
+} from 'n8n-workflow';
+import type {
+	Request,
+	GenericValue,
+	IDataObject,
+	IExecuteFunctions,
+	INodeExecutionData,
+	ISupplyDataFunctions,
+	SubNodeExecutionResult,
+} from 'n8n-workflow';
 import assert from 'node:assert';
 
 import { getPromptInputByType } from '@utils/helpers';
@@ -36,7 +51,7 @@ import { SYSTEM_MESSAGE } from '../prompt';
 /**
  * Creates an agent executor with the given configuration
  */
-function createAgentExecutor(
+function createAgentSequence(
 	model: BaseChatModel,
 	tools: Array<DynamicStructuredTool | Tool>,
 	prompt: ChatPromptTemplate,
@@ -67,16 +82,9 @@ function createAgentExecutor(
 		fixEmptyContentMessage,
 	]) as AgentRunnableSequence;
 
-	runnableAgent.singleAction = false;
+	runnableAgent.singleAction = true;
 	runnableAgent.streamRunnable = false;
-
-	return AgentExecutor.fromAgentAndTools({
-		agent: runnableAgent,
-		memory,
-		tools,
-		returnIntermediateSteps: options.returnIntermediateSteps === true,
-		maxIterations: options.maxIterations ?? 10,
-	});
+	return runnableAgent;
 }
 
 async function processEventStream(
@@ -161,6 +169,10 @@ async function processEventStream(
 	return agentResult;
 }
 
+export type RequestResponseMetadata = {
+	toolCallId: number;
+};
+
 /* -----------------------------------------------------------
    Main Executor Function
 ----------------------------------------------------------- */
@@ -177,10 +189,62 @@ async function processEventStream(
  */
 export async function toolsAgentExecute(
 	this: IExecuteFunctions | ISupplyDataFunctions,
-): Promise<INodeExecutionData[][]> {
+	responses?: SubNodeExecutionResult<RequestResponseMetadata>[],
+): Promise<INodeExecutionData[][] | Request<RequestResponseMetadata>> {
+	const steps: Array<{
+		action: {
+			tool: string;
+			toolInput: Record<string, unknown>;
+			log: string | number | true | object;
+			messageLog: AIMessage[];
+			toolCallId: IDataObject | GenericValue | GenericValue[] | IDataObject[];
+			type: string | number | true | object;
+		};
+		observation: string;
+	}> = [];
 	this.logger.debug('Executing Tools Agent V2');
 
-	const returnData: INodeExecutionData[] = [];
+	// Debug output for AI tool connections
+	if (responses) {
+		// Reconstruct steps
+		for (const tool of responses) {
+			const toolInput: IDataObject = {
+				...tool.action.input,
+				id: tool.action.id,
+			};
+			if (!toolInput || !tool.data) {
+				continue;
+			}
+
+			// Create a synthetic AI message for the messageLog
+			// This represents the AI's decision to call the tool
+			const syntheticAIMessage = new AIMessage({
+				content: `Calling ${tool.action.nodeName} with input: ${JSON.stringify(toolInput)}`,
+				tool_calls: [
+					{
+						id: (toolInput?.id as string) ?? 'reconstructed_call',
+						name: nodeNameToToolName(tool.action.nodeName),
+						args: toolInput,
+						type: 'tool_call',
+					},
+				],
+			});
+
+			steps.push({
+				action: {
+					tool: nodeNameToToolName(tool.action.nodeName),
+					toolInput: (toolInput.input as IDataObject) || {},
+					log: toolInput.log || syntheticAIMessage.content,
+					messageLog: [syntheticAIMessage],
+					toolCallId: toolInput?.id,
+					type: toolInput.type || 'tool_call',
+				},
+				observation: JSON.stringify(tool.data),
+			});
+		}
+	}
+
+	const returnData: INodeExecutionData[] | Request[] = [];
 	const items = this.getInputData();
 	const batchSize = this.getNodeParameter('options.batching.batchSize', 0, 1) as number;
 	const delayBetweenBatches = this.getNodeParameter(
@@ -236,7 +300,7 @@ export async function toolsAgentExecute(
 			const prompt: ChatPromptTemplate = preparePrompt(messages);
 
 			// Create executors for primary and fallback models
-			const executor = createAgentExecutor(
+			const executor = createAgentSequence(
 				model,
 				tools,
 				prompt,
@@ -247,6 +311,7 @@ export async function toolsAgentExecute(
 			);
 			// Invoke with fallback logic
 			const invokeParams = {
+				steps,
 				input,
 				system_message: options.systemMessage ?? SYSTEM_MESSAGE,
 				formatting_instructions:
@@ -283,7 +348,24 @@ export async function toolsAgentExecute(
 				);
 			} else {
 				// Handle regular execution
-				return await executor.invoke(invokeParams, executeOptions);
+				const response = await executor.invoke(invokeParams);
+
+				if ('returnValues' in response) {
+					return response.returnValues;
+				}
+
+				const connectedSubnodes = this.getConnectedNodes(NodeConnectionTypes.AiTool);
+
+				// If response contains tool calls, we need to return this in the right format
+				const actions: Request = response.map((action) => ({
+					nodeName: connectedSubnodes.find((node) => nodeNameToToolName(node.name) === action.tool)
+						?.name,
+					input: action.toolInput,
+					type: NodeConnectionTypes.AiTool,
+					id: action.toolCallId,
+				}));
+
+				return { actions };
 			}
 		});
 
@@ -306,6 +388,10 @@ export async function toolsAgentExecute(
 				}
 			}
 			const response = result.value;
+			if ('actions' in response) {
+				returnData.push(response);
+				return;
+			}
 			// If memory and outputParser are connected, parse the output.
 			if (memory && outputParser) {
 				const parsedOutput = jsonParse<{ output: Record<string, unknown> }>(
@@ -334,6 +420,9 @@ export async function toolsAgentExecute(
 			await sleep(delayBetweenBatches);
 		}
 	}
+	if ('actions' in returnData[0]) {
+		return returnData[0] as Request;
+	}
 
-	return [returnData];
+	return [returnData] as INodeExecutionData[][];
 }
