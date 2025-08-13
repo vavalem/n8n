@@ -20,6 +20,7 @@ import {
 	Query,
 	RestController,
 } from '@n8n/decorators';
+import { ListDataStoreRowsOptions } from 'n8n-workflow';
 
 import { DataStoreService } from './data-store.service';
 
@@ -124,7 +125,13 @@ export class DataStoreController {
 		@Param('dataStoreId') dataStoreId: string,
 		@Query dto: ListDataStoreContentQueryDto,
 	) {
-		return await this.dataStoreService.getManyRowsAndCount(dataStoreId, dto);
+		const options: Partial<ListDataStoreRowsOptions> = {
+			filter: dto.filter,
+			sortBy: dto.sortBy ? ([...dto.sortBy] as [string, 'ASC' | 'DESC']) : undefined,
+			take: dto.take,
+			skip: dto.skip,
+		};
+		return await this.dataStoreService.getManyRowsAndCount(dataStoreId, options);
 	}
 
 	@Post('/:dataStoreId/insert')

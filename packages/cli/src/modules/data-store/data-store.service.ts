@@ -1,7 +1,6 @@
 import type {
 	AddDataStoreColumnDto,
 	CreateDataStoreDto,
-	ListDataStoreContentQueryDto,
 	MoveDataStoreColumnDto,
 	DataStoreListOptions,
 	DataStoreRows,
@@ -10,7 +9,7 @@ import type {
 import { UpdateDataStoreDto } from '@n8n/api-types/src/dto/data-store/update-data-store.dto';
 import { Logger } from '@n8n/backend-common';
 import { Service } from '@n8n/di';
-import { UserError } from 'n8n-workflow';
+import { DataStoreColumnJsType, ListDataStoreRowsOptions, UserError } from 'n8n-workflow';
 
 import { DataStoreColumn } from './data-store-column.entity';
 import { DataStoreColumnRepository } from './data-store-column.repository';
@@ -138,14 +137,17 @@ export class DataStoreService {
 		return await this.dataStoreRepository.getManyAndCount(options);
 	}
 
-	async getManyRowsAndCount(dataStoreId: string, dto: ListDataStoreContentQueryDto) {
+	async getManyRowsAndCount(
+		dataStoreId: string,
+		options: Partial<ListDataStoreRowsOptions>,
+	): Promise<{ count: number; data: DataStoreRows }> {
 		// unclear if we should validate here, only use case would be to reduce the chance of
 		// a renamed/removed column appearing here (or added column missing) if the store was
 		// modified between when the frontend sent the request and we received it
 		const columns = await this.dataStoreColumnRepository.getColumns(dataStoreId);
 		const result = await this.dataStoreRowsRepository.getManyAndCount(
 			toTableName(dataStoreId),
-			dto,
+			options,
 		);
 		return {
 			count: result.count,
@@ -158,41 +160,61 @@ export class DataStoreService {
 	}
 
 	// TODO: move to utils and test
-	private normalizeRows(rows: Array<Record<string, unknown>>, columns: DataStoreColumn[]) {
+	private normalizeRows(rows: DataStoreRows, columns: DataStoreColumn[]): DataStoreRows {
 		const typeMap = new Map(columns.map((col) => [col.name, col.type]));
 		return rows.map((row) => {
-			const normalized = { ...row };
+			const normalized: Record<PropertyKey, DataStoreColumnJsType | null> = { ...row };
 			for (const [key, value] of Object.entries(row)) {
 				const type = typeMap.get(key);
-
-				if (type === 'boolean') {
-					// Convert boolean values to true/false
-					if (typeof value === 'boolean') {
-						normalized[key] = value;
-					} else if (value === 1 || value === '1') {
-						normalized[key] = true;
-					} else if (value === 0 || value === '0') {
-						normalized[key] = false;
-					}
-				}
-				if (type === 'date' && value !== null && value !== undefined) {
-					// Convert date objects or strings to ISO string
-					let dateObj: Date | null = null;
-
-					if (value instanceof Date) {
-						dateObj = value;
-					} else if (typeof value === 'string' || typeof value === 'number') {
-						const parsed = new Date(value);
-						if (!isNaN(parsed.getTime())) {
-							dateObj = parsed;
-						}
-					}
-
-					normalized[key] = dateObj ? dateObj.toISOString() : value;
+				switch (type) {
+					case 'boolean':
+						normalized[key] = this.normalizeBoolean(value);
+						break;
+					case 'date':
+						normalized[key] = this.normalizeDate(value);
+						break;
+					case 'string':
+						normalized[key] = this.normalizeString(value);
+						break;
+					case 'number':
+						normalized[key] = this.normalizeNumber(value);
+						break;
+					default:
+						normalized[key] = value as DataStoreColumnJsType | null;
 				}
 			}
 			return normalized;
 		});
+	}
+
+	private normalizeBoolean(value: unknown): boolean | null {
+		if (typeof value === 'boolean') return value;
+		if (value === 1 || value === '1') return true;
+		if (value === 0 || value === '0') return false;
+		return null;
+	}
+
+	private normalizeDate(value: unknown): Date | null {
+		if (value === null || value === undefined) return null;
+		if (value instanceof Date) return value;
+		if (typeof value === 'string' || typeof value === 'number') {
+			const parsed = new Date(value);
+			if (!isNaN(parsed.getTime())) return parsed;
+		}
+		return null;
+	}
+
+	private normalizeString(value: unknown): string | null {
+		if (value === null || value === undefined) return null;
+		if (typeof value === 'string') return value;
+		return String(value);
+	}
+
+	private normalizeNumber(value: unknown): number | null {
+		if (value === null || value === undefined) return null;
+		if (typeof value === 'number') return value;
+		const num = Number(value);
+		return isNaN(num) ? null : num;
 	}
 
 	private async validateRows(dataStoreId: string, rows: DataStoreRows): Promise<void> {
